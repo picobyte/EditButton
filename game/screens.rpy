@@ -1,6 +1,91 @@
-﻿################################################################################
+################################################################################
 ## Initialization
 ################################################################################
+
+init -2 python:
+    import os
+    import re
+    import shutil
+    from tempfile import mkstemp
+    fileLineMod = {}
+
+    # Only set this to true if you have a backup of your .rpy files(!)
+    modify_files_in_place = True
+
+    ## Call with renpy.game.context().current as argument.
+    ## the current file & linenr is returned as tuple, or None
+    def get_context(renpy_game_context_current):
+
+        ctxt = renpy.game.script.namemap.get(renpy_game_context_current, None)
+        # obtained dirname is not correct.
+        filename = re.sub(os.getcwd() + "(.*)c$", config.searchpath[0] + "\g<1>", ctxt.filename)
+        return (filename, ctxt.linenumber) if os.path.isfile(filename) else None
+
+    ## apply a modifiaction to a displayed phrase, merely stored in cache unless
+    ## modify_files_in_place is true. If set to true case the .rpy files containing
+    ## the phrase are modified in place.
+    def rephrase(who, ctxt, **kwargs):
+
+        inp = renpy.get_widget("input", "input")
+
+        if inp.default != inp.content:
+            mod = [who, inp.default, inp.content]
+
+            if not ctxt[0] in fileLineMod:
+                fileLineMod[ctxt[0]] = {}
+
+            fileLineMod[ctxt[0]][ctxt[1]] = mod
+
+            if modify_files_in_place:
+                write_rephrase_to_rpy_files({ctxt[0]: { ctxt[1]: mod}})
+
+    ## retrieve the modification stored in cache
+    def get_updated_dialogue(ctxt, say):
+
+        if ctxt and ctxt[0] in fileLineMod and ctxt[1] in fileLineMod[ctxt[0]]:
+
+            # adapt `who' and `what' if already changed this session.
+            (who, orig, what) = fileLineMod[ctxt[0]][ctxt[1]]
+            say.widgets.get("what").set_text(what)
+
+            if who:
+                say.widgets.get("who").set_text(who)
+        else:
+
+            what = say.widgets.get("what").text[0]
+            who = say.widgets.get("who")
+
+            if who:
+                who = who.text[0]
+
+        return (who, what)
+
+    ## applies the changes to phrases to the .rpy file(s)
+    def write_rephrase_to_rpy_files(changes = fileLineMod):
+
+        fh, abs_path = mkstemp()
+
+        for filename, lines in changes.iteritems():
+            fh, abs_path = mkstemp()
+            linenumber = 0
+
+            with open(abs_path,'w') as new_file:
+                with open(filename) as old_file:
+
+                    for line in old_file:
+                        linenumber += 1;
+
+                        if linenumber in lines:
+                            (who, srch, rplc) = lines[linenumber]
+
+                            if srch != rplc:
+                                line = re.sub(srch, rplc, line)
+                                fileLineMod[filename][linenumber][1] = rplc
+
+                        new_file.write(line)
+
+            os.close(fh)
+            shutil.move(abs_path, filename)
 
 init offset = -1
 
@@ -175,7 +260,7 @@ style say_dialogue:
 ##
 ## http://www.renpy.org/doc/html/screen_special.html#input
 
-screen input(prompt):
+screen input(prompt=None, default=None, closure=None, **kwargs):
     style_prefix "input"
 
     window:
@@ -185,8 +270,16 @@ screen input(prompt):
             xanchor gui.text_xalign
             ypos gui.text_ypos
 
-            text prompt style "input_prompt"
-            input id "input"
+            if prompt:
+                text prompt style "input_prompt"
+
+            if default:
+                input id "input" default default
+            else:
+                input id "input"
+
+            if closure:
+                key "K_RETURN" action [Function(closure, **kwargs), Return("K_RETURN")]
 
 
 style input_prompt is default
@@ -256,6 +349,16 @@ screen quick_menu():
 
         xalign 0.5
         yalign 1.0
+
+        if config.developer:
+
+            $ ctxt = get_context(renpy.game.context().current)
+            if ctxt:
+                $ say = renpy.get_screen("say")
+
+            if say:
+                $ who, what = get_updated_dialogue(ctxt, say)
+                textbutton _("Edit") action ShowMenu("input", default=what, closure=rephrase, who=who, ctxt=ctxt)
 
         textbutton _("Back") action Rollback()
         textbutton _("History") action ShowMenu('history')
