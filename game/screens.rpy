@@ -16,23 +16,31 @@ init -2 python:
     ## the current file & linenr is returned as tuple, or None
     def get_context(renpy_game_context_current):
 
-        ctxt = renpy.game.script.namemap.get(renpy_game_context_current, None)
-        # obtained dirname is not correct.
-        filename = re.sub(os.getcwd() + "(.*)c$", config.searchpath[0] + "\g<1>", ctxt.filename)
-        return (filename, ctxt.linenumber) if os.path.isfile(filename) else None
+        linenumber = renpy.game.script.namemap.get(renpy_game_context_current, None).linenumber
+        filename = str(renpy_game_context_current[0])
+        return [filename, linenumber]
 
     ## apply a modifiaction to a displayed phrase, merely stored in cache unless
     ## modify_files_in_place is true. If set to true case the .rpy files containing
     ## the phrase are modified in place.
-    def rephrase(who, ctxt, **kwargs):
+    def rephrase(id, ctxt):
 
-        inp = renpy.get_widget("input", "input")
+        inp = renpy.get_widget("input", id)
 
         if inp.default != inp.content:
-            mod = [who, inp.default, inp.content]
+            mod = [str(inp.default), str(inp.content)]
 
             if not ctxt[0] in fileLineMod:
                 fileLineMod[ctxt[0]] = {}
+
+            if id is not "Code":
+                if ctxt[1] in fileLineMod[ctxt[0]]:
+                    rawline = fileLineMod[ctxt[0]][ctxt[1]][0]
+                else:
+                    rawline = raw_line_from_context(ctxt)
+
+                mod[1] = rawline.replace(mod[0], mod[1])
+                mod[0] = rawline
 
             fileLineMod[ctxt[0]][ctxt[1]] = mod
 
@@ -44,21 +52,13 @@ init -2 python:
 
         if ctxt and ctxt[0] in fileLineMod and ctxt[1] in fileLineMod[ctxt[0]]:
 
-            # adapt `who' and `what' if already changed this session.
-            (who, orig, what) = fileLineMod[ctxt[0]][ctxt[1]]
-            say.widgets.get("what").set_text(what)
+            # adapt `what' if already changed this session.
+            (original, rplc) = fileLineMod[ctxt[0]][ctxt[1]]
+            m = re.match(r'^[^\"]*\"(.+?)\"[^\"]*$', rplc)
+            if m:
+                say.widgets.get("what").set_text(m.group(1))
 
-            if who:
-                say.widgets.get("who").set_text(who)
-        else:
-
-            what = say.widgets.get("what").text[0]
-            who = say.widgets.get("who")
-
-            if who:
-                who = who.text[0]
-
-        return (who, what)
+        return say.widgets.get("what").text[0]
 
     ## applies the changes to phrases to the .rpy file(s)
     def write_rephrase_to_rpy_files(changes = fileLineMod):
@@ -76,16 +76,39 @@ init -2 python:
                         linenumber += 1;
 
                         if linenumber in lines:
-                            (who, srch, rplc) = lines[linenumber]
+                            (srch, rplc) = lines[linenumber]
 
                             if srch != rplc:
                                 line = re.sub(srch, rplc, line)
-                                fileLineMod[filename][linenumber][1] = rplc
+                                fileLineMod[filename][linenumber][0] = rplc
 
                         new_file.write(line)
 
             os.close(fh)
             shutil.move(abs_path, filename)
+
+    def raw_line_from_context(ctxt):
+        linenumber = ctxt[1]
+        #FIXME: should use, but doesn't work
+        #return renpy.scriptedit.get_line_text(ctxt[0], linenumber)
+        with open(ctxt[0]) as fh:
+            for line in fh:
+                linenumber -= 1
+                if linenumber == 0:
+                    return re.sub("\r?\n$", "", line)
+
+    def change_code_context(ctxt, add, id):
+        ctxt[1] += add
+        if ctxt[1] == 0:
+            ctxt[1] = 1
+        line = raw_line_from_context(ctxt)
+        if line:
+            inp = renpy.get_widget("input", id)
+            inp.default = line
+            inp.update_text(line, True)
+        else:
+            #correct movement beyond EOF
+            ctxt[1] -= 1
 
 init offset = -1
 
@@ -260,7 +283,7 @@ style say_dialogue:
 ##
 ## http://www.renpy.org/doc/html/screen_special.html#input
 
-screen input(prompt=None, default=None, closure=None, **kwargs):
+screen input(prompt=None, default=None, id="input", closure=None, ctxt=None):
     style_prefix "input"
 
     window:
@@ -274,12 +297,15 @@ screen input(prompt=None, default=None, closure=None, **kwargs):
                 text prompt style "input_prompt"
 
             if default:
-                input id "input" default default
+                input id id default default
             else:
-                input id "input"
+                input id id
 
             if closure:
-                key "K_RETURN" action [Function(closure, **kwargs), Return("K_RETURN")]
+                key "K_RETURN" action [Function(closure, id=id, ctxt=ctxt), Return("K_RETURN")]
+                if id == "Code":
+                    key "K_UP" action Function(change_code_context, ctxt=ctxt, add=-1, id=id)
+                    key "K_DOWN" action Function(change_code_context, ctxt=ctxt, add=1, id=id)
 
 
 style input_prompt is default
@@ -355,10 +381,12 @@ screen quick_menu():
             $ ctxt = get_context(renpy.game.context().current)
             if ctxt:
                 $ say = renpy.get_screen("say")
+                $ line = raw_line_from_context(ctxt)
 
             if say:
-                $ who, what = get_updated_dialogue(ctxt, say)
-                textbutton _("Edit") action ShowMenu("input", default=what, closure=rephrase, who=who, ctxt=ctxt)
+                $ what = get_updated_dialogue(ctxt, say)
+                textbutton _("Edit") action ShowMenu("input", default=what, closure=rephrase, id="Edit", ctxt=ctxt)
+                textbutton _("Code") action ShowMenu("input", default=line, closure=rephrase, id="Code", ctxt=ctxt)
 
         textbutton _("Back") action Rollback()
         textbutton _("History") action ShowMenu('history')
