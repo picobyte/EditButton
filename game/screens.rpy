@@ -13,60 +13,62 @@ init -2 python:
     modify_files_in_place = True
 
     ## Call with renpy.game.context().current as argument.
-    ## the current file & linenr is returned as tuple, or None
+    ## the current file & linenr is returned as list
     def get_context(renpy_game_context_current):
 
         filename = str(renpy_game_context_current[0])
         if not filename in fileLine:
             readfile(filename)
 
-        return [filename, renpy.game.script.namemap.get(renpy_game_context_current, None).linenumber - 1]
+        return [filename, renpy.game.script.namemap.get(renpy_game_context_current, None).linenumber]
 
+    ## read .rpy file in fileLine. lines are zero based.
     def readfile(filename):
 
-        fileLine[filename] = []
+        fileLine[filename] = [False]
         with open(filename) as fh:
 
             for line in fh:
                 fileLine[filename].append(line.rstrip('\r\n'))
 
-    ## apply a modification to a displayed phrase, merely stored in cache unless
-    ## modify_files_in_place is true.
+    ## apply a modification to a displayed phrase, merely stored in cache unless modify_files_in_place is true.
     def rephrase(id, ctxt):
 
         inp = renpy.get_widget("input", id)
         if inp.default != inp.content:
+            fileLine[ctxt[0]][0] = True # 0th marks changed
 
             fileLine[ctxt[0]][ctxt[1]] = inp.content
 
             if modify_files_in_place:
-                write_rephrase_to_rpy_files(only=ctxt[0])
+                write_rephrase_to_rpy_files()
 
     ## applies the changes to phrases to the .rpy file(s)
-    def write_rephrase_to_rpy_files(onlyfile=None):
+    def write_rephrase_to_rpy_files():
 
         for filename, lines in fileLine.iteritems():
-            if not onlyfile or filename is onlyfile:
+            if lines[0]:
 
                 fh, abs_path = mkstemp()
                 with open(abs_path,'w') as new_file:
 
-                    for linenumber in range(0, len(lines)):
+                    for linenumber in range(1, len(lines)):
                         new_file.write(lines[linenumber]+os.linesep)
 
                 os.close(fh)
                 shutil.move(abs_path, filename)
+                lines[0] = False # changes applied
 
-    def get_updated_dialogue(ctxt, say):
+    def update_dialogue(ctxt, say):
 
         # adapt `what' if already changed this session.
-        m = re.match(r'^[^\"]*\"(.+?)\"[^\"]*$', fileLine[ctxt[0]][ctxt[1]])
+        m = re.match(r'^[^"\']*("(?:[^"]*|\\.)"|\'(?:[^\']+?|\\.)\').*$', fileLine[ctxt[0]][ctxt[1]])
         if m:
-            say.widgets.get("what").set_text(m.group(1))
+            say.widgets.get("what").set_text(m.group(1)[1:-1])
 
     def change_edit_context(ctxt, add, id):
 
-        ctxt[1] = max(0, min(ctxt[1] + add, len(fileLine[ctxt[0]]) - 1))
+        ctxt[1] = max(1, min(ctxt[1] + add, len(fileLine[ctxt[0]]) - 1))
         line = fileLine[ctxt[0]][ctxt[1]]
 
         inp = renpy.get_widget("input", id)
@@ -353,12 +355,11 @@ screen quick_menu(ctxt=None):
                     textbutton _("Edit") action ShowMenu("input", default=line, closure=rephrase, id="Edit", ctxt=ctxt)
                     $ say = renpy.get_screen("say")
                     if say:
-                        $ get_updated_dialogue(ctxt, say)
+                        $ update_dialogue(ctxt, say)
 
             elif say:
                 $ line = fileLine[ctxt[0]][ctxt[1]]
                 textbutton _("Edit") action Return()
-
 
         textbutton _("Back") action Rollback()
         textbutton _("History") action ShowMenu('history')
