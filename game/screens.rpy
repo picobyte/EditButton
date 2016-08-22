@@ -7,7 +7,7 @@ init -2 python:
     import re
     import shutil
     from tempfile import mkstemp
-    fileLineMod = {}
+    fileLine = {}
 
     # Only set this to true if you have a backup of your .rpy files(!)
     modify_files_in_place = True
@@ -16,99 +16,62 @@ init -2 python:
     ## the current file & linenr is returned as tuple, or None
     def get_context(renpy_game_context_current):
 
-        linenumber = renpy.game.script.namemap.get(renpy_game_context_current, None).linenumber
         filename = str(renpy_game_context_current[0])
-        return [filename, linenumber]
+        if not filename in fileLine:
+            readfile(filename)
 
-    ## apply a modifiaction to a displayed phrase, merely stored in cache unless
-    ## modify_files_in_place is true. If set to true case the .rpy files containing
-    ## the phrase are modified in place.
+        return [filename, renpy.game.script.namemap.get(renpy_game_context_current, None).linenumber - 1]
+
+    def readfile(filename):
+
+        fileLine[filename] = []
+        with open(filename) as fh:
+
+            for line in fh:
+                fileLine[filename].append(line.rstrip('\r\n'))
+
+    ## apply a modification to a displayed phrase, merely stored in cache unless
+    ## modify_files_in_place is true.
     def rephrase(id, ctxt):
 
         inp = renpy.get_widget("input", id)
-
         if inp.default != inp.content:
-            mod = [str(inp.default), str(inp.content)]
 
-            if not ctxt[0] in fileLineMod:
-                fileLineMod[ctxt[0]] = {}
-
-            if id is not "Code":
-                if ctxt[1] in fileLineMod[ctxt[0]]:
-                    rawline = fileLineMod[ctxt[0]][ctxt[1]][0]
-                else:
-                    rawline = raw_line_from_context(ctxt)
-
-                mod[1] = rawline.replace(mod[0], mod[1])
-                mod[0] = rawline
-
-            fileLineMod[ctxt[0]][ctxt[1]] = mod
+            fileLine[ctxt[0]][ctxt[1]] = inp.content
 
             if modify_files_in_place:
-                write_rephrase_to_rpy_files({ctxt[0]: { ctxt[1]: mod}})
-
-    ## retrieve the modification stored in cache
-    def get_updated_dialogue(ctxt, say):
-
-        if ctxt and ctxt[0] in fileLineMod and ctxt[1] in fileLineMod[ctxt[0]]:
-
-            # adapt `what' if already changed this session.
-            (original, rplc) = fileLineMod[ctxt[0]][ctxt[1]]
-            m = re.match(r'^[^\"]*\"(.+?)\"[^\"]*$', rplc)
-            if m:
-                say.widgets.get("what").set_text(m.group(1))
-
-        return say.widgets.get("what").text[0]
+                write_rephrase_to_rpy_files(only=ctxt[0])
 
     ## applies the changes to phrases to the .rpy file(s)
-    def write_rephrase_to_rpy_files(changes = fileLineMod):
+    def write_rephrase_to_rpy_files(onlyfile=None):
 
-        fh, abs_path = mkstemp()
+        for filename, lines in fileLine.iteritems():
+            if not onlyfile or filename is onlyfile:
 
-        for filename, lines in changes.iteritems():
-            fh, abs_path = mkstemp()
-            linenumber = 0
+                fh, abs_path = mkstemp()
+                with open(abs_path,'w') as new_file:
 
-            with open(abs_path,'w') as new_file:
-                with open(filename) as old_file:
+                    for linenumber in range(0, len(lines)):
+                        new_file.write(lines[linenumber]+os.linesep)
 
-                    for line in old_file:
-                        linenumber += 1;
+                os.close(fh)
+                shutil.move(abs_path, filename)
 
-                        if linenumber in lines:
-                            (srch, rplc) = lines[linenumber]
+    def get_updated_dialogue(ctxt, say):
 
-                            if srch != rplc:
-                                line = re.sub(srch, rplc, line)
-                                fileLineMod[filename][linenumber][0] = rplc
+        # adapt `what' if already changed this session.
+        m = re.match(r'^[^\"]*\"(.+?)\"[^\"]*$', fileLine[ctxt[0]][ctxt[1]])
+        if m:
+            say.widgets.get("what").set_text(m.group(1))
 
-                        new_file.write(line)
+    def change_edit_context(ctxt, add, id):
 
-            os.close(fh)
-            shutil.move(abs_path, filename)
+        ctxt[1] = max(0, min(ctxt[1] + add, len(fileLine[ctxt[0]]) - 1))
+        line = fileLine[ctxt[0]][ctxt[1]]
 
-    def raw_line_from_context(ctxt):
-        linenumber = ctxt[1]
-        #FIXME: should use, but doesn't work
-        #return renpy.scriptedit.get_line_text(ctxt[0], linenumber)
-        with open(ctxt[0]) as fh:
-            for line in fh:
-                linenumber -= 1
-                if linenumber == 0:
-                    return re.sub("\r?\n$", "", line)
-
-    def change_code_context(ctxt, add, id):
-        ctxt[1] += add
-        if ctxt[1] == 0:
-            ctxt[1] = 1
-        line = raw_line_from_context(ctxt)
-        if line:
-            inp = renpy.get_widget("input", id)
-            inp.default = line
-            inp.update_text(line, True)
-        else:
-            #correct movement beyond EOF
-            ctxt[1] -= 1
+        inp = renpy.get_widget("input", id)
+        inp.default = line
+        inp.update_text(line, True)
 
 init offset = -1
 
@@ -303,10 +266,14 @@ screen input(prompt=None, default=None, id="input", closure=None, ctxt=None):
 
             if closure:
                 key "K_RETURN" action [Function(closure, id=id, ctxt=ctxt), Return("K_RETURN")]
-                if id == "Code":
-                    key "K_UP" action Function(change_code_context, ctxt=ctxt, add=-1, id=id)
-                    key "K_DOWN" action Function(change_code_context, ctxt=ctxt, add=1, id=id)
 
+            if id == "Edit":
+                key "K_UP" action Function(change_edit_context, ctxt=ctxt, add=-1, id=id)
+                key "K_DOWN" action Function(change_edit_context, ctxt=ctxt, add=1, id=id)
+                key "repeat_K_UP" action Function(change_edit_context, ctxt=ctxt, add=-1, id=id)
+                key "repeat_K_DOWN" action Function(change_edit_context, ctxt=ctxt, add=1, id=id)
+
+    use quick_menu(ctxt)
 
 style input_prompt is default
 
@@ -364,7 +331,7 @@ style choice_button_text is default:
 ## The quick menu is displayed in-game to provide easy access to the out-of-game
 ## menus.
 
-screen quick_menu():
+screen quick_menu(ctxt=None):
 
     # Ensure this appears on top of other screens.
     zorder 100
@@ -377,16 +344,21 @@ screen quick_menu():
         yalign 1.0
 
         if config.developer:
+            # are we already editing a certain file-line? if not define what context will be edited.
+            if ctxt is None:
 
-            $ ctxt = get_context(renpy.game.context().current)
-            if ctxt:
-                $ say = renpy.get_screen("say")
-                $ line = raw_line_from_context(ctxt)
+                $ ctxt = get_context(renpy.game.context().current)
+                if ctxt:
+                    $ line = fileLine[ctxt[0]][ctxt[1]]
+                    textbutton _("Edit") action ShowMenu("input", default=line, closure=rephrase, id="Edit", ctxt=ctxt)
+                    $ say = renpy.get_screen("say")
+                    if say:
+                        $ get_updated_dialogue(ctxt, say)
 
-            if say:
-                $ what = get_updated_dialogue(ctxt, say)
-                textbutton _("Edit") action ShowMenu("input", default=what, closure=rephrase, id="Edit", ctxt=ctxt)
-                textbutton _("Code") action ShowMenu("input", default=line, closure=rephrase, id="Code", ctxt=ctxt)
+            elif say:
+                $ line = fileLine[ctxt[0]][ctxt[1]]
+                textbutton _("Edit") action Return()
+
 
         textbutton _("Back") action Rollback()
         textbutton _("History") action ShowMenu('history')
