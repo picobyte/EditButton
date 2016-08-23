@@ -29,6 +29,7 @@ label start:
 
     e "Once you add a story, pictures, and music, you can release it to the world!"
 
-    ## This ends the game.
+    $ end_of_dialogue()
 
+    ## This ends the game.
     return
