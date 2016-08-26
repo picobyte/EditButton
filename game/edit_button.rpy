@@ -19,38 +19,40 @@ init python:
     class Patch(object):
         before = 12
         after = 12
+        lnr = 0
+        fname = ""
+        fl = {}
         def __init__(self):
             self.undo()
 
         def undo(self):
-            self._fl = {}
             self.files_changed = False
             self.updated_context()
 
         @property
         def line(self):
-            return self._fl[self.fname][self.lnr]
+            return self.fl[self.fname][self.lnr]
 
         def linedisplay(self, i=None):
             if not i:
                 i = self.lnr
-            line = self._fl[self.fname][i]
+            line = self.fl[self.fname][i]
             if i != self.lnr:
                 if has_renpyformatter:
                     line = highlight(line, PythonLexer(), RenPyFormatter()).rstrip('\r\n')
                 else:
                     line = ("{alpha=-%.2f}" % min(0.8, 0.07 * abs(i-self.lnr))) + line + "{/alpha}"
 
-            return (line, "edit"+str(i))
+            return line
 
         def lines_before(self):
-            return [self.linedisplay(i) for i in range(max(self.lnr - self.before, 1), self.lnr)]
+            return "\n".join([self.linedisplay(i) for i in range(max(self.lnr - self.before, 1), self.lnr)])
 
         def lines_after(self):
-            mx = min(self.lnr + self.after + self.before - min(self.before, self.lnr - 1), len(self._fl[self.fname]))
-            return [self.linedisplay(i) for i in range(self.lnr + 1, mx)]
+            mx = min(self.lnr + self.after + self.before - min(self.before, self.lnr - 1), len(self.fl[self.fname]))
+            return "\n".join([self.linedisplay(i) for i in range(self.lnr + 1, mx)])
 
-        ## the current file & linenr is returned as list
+        ## updates context and loads file, if not already in cache; returns ok or not
         def updated_context(self):
 
             ctxt = renpy.get_filename_line()
@@ -59,13 +61,13 @@ init python:
 
             (self.fname, self.lnr) = ctxt
 
-            if not self.fname in self._fl:
+            if not self.fname in self.fl:
 
-                self._fl[self.fname] = [False]
+                self.fl[self.fname] = [False]
                 with open(os.path.join(renpy.config.basedir, self.fname)) as fh:
 
                     for line in fh:
-                        self._fl[self.fname].append(line.rstrip('\r\n'))
+                        self.fl[self.fname].append(line.rstrip('\r\n'))
             return True
 
         ## apply a modification to a displayed phrase, in cache until applied.
@@ -74,13 +76,13 @@ init python:
             ed = renpy.get_widget("edit", "Edit")
             if ed.default != ed.content:
 
-                self.files_changed = self._fl[self.fname][0] = True # 0th marks changed
-                self._fl[self.fname][self.lnr] = ed.content
+                self.files_changed = self.fl[self.fname][0] = True # 0th marks changed
+                self.fl[self.fname][self.lnr] = ed.content
 
         ## apply changes to phrases to the .rpy file(s)
         def recode_rpy_files(self):
             self.files_changed = False
-            for filename, lines in self._fl.iteritems():
+            for filename, lines in self.fl.iteritems():
                 if lines[0]:
                     fh, abs_path = mkstemp()
 
@@ -105,10 +107,10 @@ init python:
             # if at end of input and we move, rather than inserting a line, edit one elsewhere.
             prompt = renpy.get_widget("edit", "prompt")
             if prompt and "(End of dialogue)" in prompt.text:
-                del self._fl[self.fname][self.lnr]
+                del self.fl[self.fname][self.lnr]
                 prompt.set_text("")
 
-            self.lnr = max(1, min(self.lnr + add, len(self._fl[self.fname]) - 1))
+            self.lnr = max(1, min(self.lnr + add, len(self.fl[self.fname]) - 1))
 
             ed = renpy.get_widget("edit", "Edit")
             ed.default = self.line
@@ -122,9 +124,10 @@ init python:
             if self.updated_context():
                 m = re.match("^(\s+)", self.line)
                 if m:
-                    self._fl[self.fname].insert(self.lnr, m.group(1))
+                    self.fl[self.fname].insert(self.lnr, m.group(1))
                     renpy.call_screen("edit", prompt="(End of dialogue)")
 
+image my_img:
 
 screen edit(prompt=None):
     style_prefix "input"
@@ -141,13 +144,13 @@ screen edit(prompt=None):
             if prompt:
                 text prompt id "prompt" style "input_prompt"
 
-            for line in patch.lines_before():
-                text line[0] id line[1] style "default"
+            if not patch.lnr == 1:
+                text patch.lines_before() id "before" style "default"
 
-            input id "Edit" default patch.linedisplay()[0] style "default" color edit_line_color
+            input id "Edit" default patch.linedisplay() color edit_line_color style "default"
 
-            for line in patch.lines_after():
-                text line[0] id line[1] style "default"
+            if not patch.lnr == len(patch.fl[patch.fname]) - 1:
+                text patch.lines_after() id "after" style "default"
 
             key "K_RETURN" action [Function(patch.recode), Return("K_RETURN")]
 
