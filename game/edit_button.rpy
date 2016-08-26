@@ -85,7 +85,7 @@ init python:
                     fh, abs_path = mkstemp()
 
                     for linenr in range(1, len(lines)):
-                        os.write(fh, lines[linenr]+'\r\n')
+                        os.write(fh, lines[linenr]+os.linesep)
 
                     os.close(fh)
                     shutil.move(abs_path, os.path.join(renpy.config.basedir, filename))
