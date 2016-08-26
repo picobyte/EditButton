@@ -174,7 +174,7 @@ style say_dialogue:
 ##
 ## http://www.renpy.org/doc/html/screen_special.html#input
 
-screen input(prompt=None, default=None):
+screen input(prompt=None, default=""):
     style_prefix "input"
 
     window:
@@ -187,10 +187,7 @@ screen input(prompt=None, default=None):
             if prompt:
                 text prompt style "input_prompt"
 
-            if default:
-                input id id default default
-            else:
-                input id id
+            input id "input" default default
 
 
 style input_prompt is default
