@@ -30,7 +30,5 @@ label start:
 
     e "Once you add a story, pictures, and music, you can release it to the world!"
 
-    $ patch.end_of_dialogue()
-
     ## This ends the game.
     return

@@ -10,7 +10,7 @@ mv pygments_filters_init_py_replacement game/python-packages/pygments/filters/__
 
 
 
-# Alternatively, this should work as well:
+# The alternative for the file replacement, is the removal of non utf-8 characters therein, which cause a bytecode error during Ren'Py compilation:
 # sed -i 's/[\d128-\d255]/./g' game/python-packages/pygments/filters/__init__.py
 
 
