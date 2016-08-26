@@ -2,131 +2,7 @@
 ## Initialization
 ################################################################################
 
-init -2 python:
-    import os
-    import re
-    import shutil
-    from tempfile import mkstemp
-
-    #FIXME: would like to be able to save/restore unapplied changes
-    if not hasattr(renpy.store,'fileLine'):
-        fileLine = {}
-    if not hasattr(renpy.store,'files_changed'):
-        files_changed = False
-
-    ## the current file & linenr is returned as list
-    def get_context():
-
-        ctxt = renpy.get_filename_line()
-        if ctxt[1] and not ctxt[0] in fileLine:
-            readfile(ctxt[0])
-
-        return list(ctxt)
-
-    ## read .rpy file in fileLine.
-    def readfile(filename):
-
-        fileLine[filename] = [False]
-        with open(renpy.config.basedir + os.path.sep + filename) as fh:
-
-            for line in fh:
-                fileLine[filename].append(line.rstrip('\r\n'))
-
-    ## apply a modification to a displayed phrase, in cache until applied.
-    def rephrase(ctxt):
-
-        ed = renpy.get_widget("edit", "Edit")
-        if ed.default != ed.content:
-
-            global files_changed
-            files_changed = fileLine[ctxt[0]][0] = True # 0th marks changed
-            fileLine[ctxt[0]][ctxt[1]] = ed.content
-
-    ## apply changes to phrases to the .rpy file(s)
-    def write_rephrase_to_rpy_files():
-        global files_changed
-        files_changed = False
-        for filename, lines in fileLine.iteritems():
-            if lines[0]:
-                fh, abs_path = mkstemp()
-
-                for linenumber in range(1, len(lines)):
-                    os.write(fh, lines[linenumber]+os.linesep)
-
-                os.close(fh)
-                shutil.move(abs_path, renpy.config.basedir + os.path.sep + filename)
-                lines[0] = False # changes applied
-
-    def update_dialogue(what):
-
-        ctxt = get_context()
-
-        # adapt `what' if already changed this session.
-        matched = re.match(r'^[^"\']*("(?:[^"]*|\\.)"|\'(?:[^\']+?|\\.)\').*$', fileLine[ctxt[0]][ctxt[1]])
-
-        return matched.group(1)[1:-1] if matched else what
-
-    def change_edit_context(ctxt, add):
-
-        # if at end of input and we move, rather than inserting a line, edit one elsewhere.
-        prompt = renpy.get_widget("edit", "prompt")
-        if prompt and "(End of dialogue)" in prompt.text:
-            del fileLine[ctxt[0]][ctxt[1]]
-            prompt.set_text("")
-
-        ctxt[1] = max(1, min(ctxt[1] + add, len(fileLine[ctxt[0]]) - 1))
-        line = fileLine[ctxt[0]][ctxt[1]]
-
-        ed = renpy.get_widget("edit", "Edit")
-        ed.default = line
-        ed.update_text(line, True)
-
-    def end_of_dialogue():
-        ctxt = get_context()
-        if ctxt[1]:
-            line = fileLine[ctxt[0]][ctxt[1]]
-            m = re.match("^(\s+)", line)
-            if m:
-                fileLine[ctxt[0]].insert(ctxt[1], m.group(1))
-                renpy.call_screen("edit", ctxt=ctxt, prompt="(End of dialogue)")
-
 init offset = -1
-
-screen edit(ctxt, prompt=None):
-    style_prefix "input"
-    $ line = fileLine[ctxt[0]][ctxt[1]]
-
-    window:
-
-        vbox:
-            xpos gui.text_xpos
-            xanchor gui.text_xalign
-            ypos gui.text_ypos
-
-            if prompt:
-                text prompt id "prompt" style "input_prompt"
-
-            if line:
-                input id "Edit" default line
-            else:
-                input id "Edit"
-
-            key "K_RETURN" action [Function(rephrase, ctxt=ctxt), Return("K_RETURN")]
-
-            key "K_UP" action Function(change_edit_context, ctxt=ctxt, add=-1)
-            key "K_DOWN" action Function(change_edit_context, ctxt=ctxt, add=1)
-            key "repeat_K_UP" action Function(change_edit_context, ctxt=ctxt, add=-1)
-            key "repeat_K_DOWN" action Function(change_edit_context, ctxt=ctxt, add=1)
-
-        vbox:
-            style_prefix "quick"
-
-            xalign 0.5
-            yalign 1.0
-            if files_changed:
-                textbutton _("Apply") action Function(write_rephrase_to_rpy_files)
-            textbutton _("Undo") action Return()
-
 
 ################################################################################
 ## Styles
@@ -226,12 +102,11 @@ style frame:
 
 screen say(who, what):
     style_prefix "say"
-    $ what = update_dialogue(what)
 
     window:
         id "window"
 
-        text what id "what"
+        text patch.update_dialogue(what) id "what"
 
         if who is not None:
 
@@ -340,11 +215,9 @@ style input:
 
 screen choice(items):
     style_prefix "choice"
-
     vbox:
         for i in items:
             textbutton i.caption action i.action
-
 
 ## When this is true, menu captions will be spoken by the narrator. When false,
 ## menu captions will be displayed as empty buttons.
@@ -387,12 +260,13 @@ screen quick_menu():
         yalign 1.0
 
         if config.developer:
-            # are we already editing a certain file-line? if not define what context will be edited.
-            $ ctxt = get_context()
-            if ctxt[1]:
-                textbutton _("Edit") action ShowMenu("edit", ctxt=ctxt)
-            if files_changed:
-                textbutton _("Apply") action Function(write_rephrase_to_rpy_files)
+            if patch.updated_context():
+                textbutton _("Edit") action ShowMenu("edit")
+                textbutton _("External editor") action Function(patch.external_editor)
+
+            if patch.files_changed:
+                textbutton _("Apply") action Function(patch.recode_rpy_files)
+                textbutton _("Undo Changes") action Function(patch.undo)
 
         textbutton _("Back") action Rollback()
         textbutton _("History") action ShowMenu('history')

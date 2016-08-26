@@ -9,6 +9,8 @@ define e = Character('Eileen')
 ## The game starts here.
 
 label start:
+    if not hasattr(renpy.store,'patch'):
+        $patch = Patch()
 
     ## Show a background. This uses a placeholder by default, but you can add a
     ## file (named either "bg room.png" or "bg room.jpg") to the images
@@ -29,7 +31,7 @@ label start:
 
     e "Once you add a story, pictures, and music, you can release it to the world!"
 
-    $ end_of_dialogue()
+    $ patch.end_of_dialogue()
 
     ## This ends the game.
     return
