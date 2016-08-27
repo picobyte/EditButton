@@ -4,6 +4,7 @@ init python:
     import shutil
 
     from tempfile import mkstemp
+    import math
     has_renpyformatter = True
     edit_line_color = "#fff"
 
@@ -45,8 +46,8 @@ init python:
                 lines += highlight("".join(self.fl[self.fname][s:e]), self.lexer, RenPyFormatter())
             else:
                 for i in range(s, e):
-                    alpha = -min(0.8, 0.07 * abs(i-self.lnr))
-                    lines += ("{alpha=%.2f}" % alpha) + self.fl[self.fname][i] + "{/alpha}\n"
+                    alpha = -min(0.8, 0.1 * math.log(abs(i-self.lnr) + 1))
+                    lines += ("{alpha=%.2f}" % alpha) + self.fl[self.fname][i] + "{/alpha}"
             return lines
 
         def get_cursor_pos(self):
