@@ -12,6 +12,7 @@ init python:
         from pygments import highlight
         from renpy_lexer import RenPyLexer
         from renpyformatter import RenPyFormatter
+        from pygments.styles import get_style_by_name
     except ImportError:
         has_renpyformatter = False
 
@@ -43,7 +44,7 @@ init python:
                 lines += self.fl[self.fname][s]
                 s += 1
             if has_renpyformatter:
-                lines += highlight("".join(self.fl[self.fname][s:e]), self.lexer, RenPyFormatter())
+                lines += highlight("".join(self.fl[self.fname][s:e]), self.lexer, RenPyFormatter(style='monokai'))
             else:
                 for i in range(s, e):
                     alpha = -min(0.8, 0.1 * math.log(abs(i-self.lnr) + 1))
