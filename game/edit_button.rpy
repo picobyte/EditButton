@@ -5,24 +5,23 @@ init python:
 
     from tempfile import mkstemp
     has_renpyformatter = True
-    edit_line_color = "#777"
+    edit_line_color = "#fff"
 
     try:
         from pygments import highlight
-        from pygments.lexers.python import PythonLexer
+        from renpy_lexer import RenPyLexer
         from renpyformatter import RenPyFormatter
     except ImportError:
         has_renpyformatter = False
-        edit_line_color = "#fff"
 
 
     class Patch(object):
-        before = 12
-        after = 12
+        maxlines = 24
         lnr = 0
         fname = ""
         fl = {}
         def __init__(self):
+            self.lexer = RenPyLexer()
             self.undo()
 
         def undo(self):
@@ -31,28 +30,28 @@ init python:
 
         @property
         def line(self):
-            return self.fl[self.fname][self.lnr]
+            return self.fl[self.fname][self.lnr].rstrip('\r\n')
 
-        def linedisplay(self, i=None):
-            if not i:
-                i = self.lnr
-            line = self.fl[self.fname][i]
-            if i != self.lnr:
-                if has_renpyformatter:
-                    line = highlight(line, PythonLexer(), RenPyFormatter()).rstrip('\r\n')
-                else:
-                    line = ("{alpha=-%.2f}" % min(0.8, 0.07 * abs(i-self.lnr))) + line + "{/alpha}"
+        def context_lines(self):
+            s = max(self.lnr - self.maxlines, 1)
+            e = min(s + self.maxlines + 1, len(self.fl[self.fname]))
 
-            return line
+            #pygments strips leading whitespace. prevent this.
+            lines = ""
+            while s != e and self.fl[self.fname][s].rstrip('\r\n') == "":
+                lines += self.fl[self.fname][s]
+                s += 1
+            if has_renpyformatter:
+                lines += highlight("".join(self.fl[self.fname][s:e]), self.lexer, RenPyFormatter())
+            else:
+                for i in range(s, e):
+                    alpha = -min(0.8, 0.07 * abs(i-self.lnr))
+                    lines += ("{alpha=%.2f}" % alpha) + self.fl[self.fname][i] + "{/alpha}\n"
+            return lines
 
-        def lines_before(self):
-            return "\n".join([self.linedisplay(i) for i in range(max(self.lnr - self.before, 1), self.lnr)])
+        def get_cursor_pos(self):
+            return min(self.maxlines, self.lnr - 1) * (style.default.size + 6)
 
-        def lines_after(self):
-            mx = min(self.lnr + self.after + self.before - min(self.before, self.lnr - 1), len(self.fl[self.fname]))
-            return "\n".join([self.linedisplay(i) for i in range(self.lnr + 1, mx)])
-
-        ## updates context and loads file, if not already in cache; returns ok or not
         def updated_context(self):
 
             ctxt = renpy.get_filename_line()
@@ -67,17 +66,8 @@ init python:
                 with open(os.path.join(renpy.config.basedir, self.fname)) as fh:
 
                     for line in fh:
-                        self.fl[self.fname].append(line.rstrip('\r\n'))
+                        self.fl[self.fname].append(line)
             return True
-
-        ## apply a modification to a displayed phrase, in cache until applied.
-        def recode(self):
-
-            ed = renpy.get_widget("edit", "Edit")
-            if ed.default != ed.content:
-
-                self.files_changed = self.fl[self.fname][0] = True # 0th marks changed
-                self.fl[self.fname][self.lnr] = ed.content
 
         ## apply changes to phrases to the .rpy file(s)
         def recode_rpy_files(self):
@@ -103,7 +93,6 @@ init python:
 
         def change_context(self, add):
 
-            self.recode()
             # if at end of input and we move, rather than inserting a line, edit one elsewhere.
             prompt = renpy.get_widget("edit", "prompt")
             if prompt and "(End of dialogue)" in prompt.text:
@@ -112,12 +101,14 @@ init python:
 
             self.lnr = max(1, min(self.lnr + add, len(self.fl[self.fname]) - 1))
 
-            ed = renpy.get_widget("edit", "Edit")
-            ed.default = self.line
-            ed.update_text(self.line, True)
-
         def external_editor(self, transient=1):
             renpy.exports.launch_editor([self.fname], self.lnr, transient=transient)
+
+        def update_lines(self, update):
+            lns = renpy.get_widget("edit", "lines")
+            #if ed and lns:
+            self.fl[self.fname][self.lnr] = update + os.linesep
+            lns.set_text(self.context_lines())
 
         # FIXME: edit button behaviour is a bit odd. also darker than rest?
         def end_of_dialogue(self):
@@ -125,49 +116,38 @@ init python:
                 m = re.match("^(\s+)", self.line)
                 if m:
                     self.fl[self.fname].insert(self.lnr, m.group(1))
-                    renpy.call_screen("edit", prompt="(End of dialogue)")
+                    renpy.call_screen("edit")
 
 image my_img:
 
-screen edit(prompt=None):
-    style_prefix "input"
-
+screen edit():
     window:
         style "nvl_window"
 
-        vbox:
-            ypos 0
-            xpos gui.text_xpos
-            xanchor gui.text_xalign
-            #ypos gui.text_ypos
+        xpos gui.text_xpos
 
-            if prompt:
-                text prompt id "prompt" style "input_prompt"
+        # TODO: only draw cursor and remove this:
+        add Input(default=patch.line, style="default", changed=patch.update_lines, ypos=patch.get_cursor_pos(), color="#000")
 
-            if not patch.lnr == 1:
-                text patch.lines_before() id "before" style "default"
+        if len(patch.fl[patch.fname]) > 1:
+            text patch.context_lines() id "lines" style "default" ypos 0
 
-            input id "Edit" default patch.linedisplay() color edit_line_color style "default"
+        key "K_RETURN" action Return("K_RETURN")
 
-            if not patch.lnr == len(patch.fl[patch.fname]) - 1:
-                text patch.lines_after() id "after" style "default"
+        key "K_UP" action Function(patch.change_context, add=-1)
+        key "K_DOWN" action Function(patch.change_context, add=1)
 
-            key "K_RETURN" action [Function(patch.recode), Return("K_RETURN")]
+        key "ctrl_K_HOME" action Function(patch.change_context, add=-(1 << 24))
+        key "ctrl_K_END" action Function(patch.change_context, add=1 << 24)
 
-            key "K_UP" action Function(patch.change_context, add=-1)
-            key "K_DOWN" action Function(patch.change_context, add=1)
+        key "K_PAGEUP" action Function(patch.change_context, add=-patch.maxlines)
+        key "K_PAGEDOWN" action Function(patch.change_context, add=patch.maxlines)
 
-            key "K_HOME" action Function(patch.change_context, add=-(1 << 24))
-            key "K_END" action Function(patch.change_context, add=1 << 24)
+        key "repeat_K_UP" action Function(patch.change_context, add=-1)
+        key "repeat_K_DOWN" action Function(patch.change_context, add=+1)
 
-            key "K_PAGEUP" action Function(patch.change_context, add=-patch.before-patch.after)
-            key "K_PAGEDOWN" action Function(patch.change_context, add=patch.before+patch.after)
-
-            key "repeat_K_UP" action Function(patch.change_context, add=-1)
-            key "repeat_K_DOWN" action Function(patch.change_context, add=+1)
-
-            key "repeat_K_PAGEUP" action Function(patch.change_context, add=-patch.before-patch.after)
-            key "repeat_K_PAGEDOWN" action Function(patch.change_context, add=patch.before+patch.after)
+        key "repeat_K_PAGEUP" action Function(patch.change_context, add=-patch.maxlines)
+        key "repeat_K_PAGEDOWN" action Function(patch.change_context, add=patch.maxlines)
 
         hbox:
             style_prefix "quick"

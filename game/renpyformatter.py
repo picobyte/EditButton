@@ -17,10 +17,13 @@ class RenPyFormatter(Formatter):
             if style['color']:
                 start += '{color=#%s}' % style['color'].lower()
                 end = '{/color}' + end
-            for s in ['bold', 'italic', 'underline']:
+            for s in ['italic', 'underline']: #, 'bold' this moves the input line so won't work
                 if style[s]:
                     start += '{'+s[0]+'}'
                     end = '{/'+s[0]+'}' + end
+            if style['bold']:
+                start += '{alpha=-0.1}'
+                end = '{/alpha}' + end
             self.styles[token] = (start, end)
 
     def format(self, tokensource, outfile):
