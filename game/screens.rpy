@@ -106,7 +106,7 @@ screen say(who, what):
     window:
         id "window"
 
-        text patch.update_dialogue(what) id "what"
+        text editor.update_dialogue(what) id "what"
 
         if who is not None:
 
@@ -257,13 +257,14 @@ screen quick_menu():
         yalign 1.0
 
         if config.developer:
-            if patch.updated_context():
+            if editor.updated_context():
                 textbutton _("Edit") action ShowMenu("edit")
-                textbutton _("External editor") action Function(patch.external_editor)
+                textbutton _("External editor") action Function(editor.external_editor)
 
-            if patch.files_changed:
-                textbutton _("Apply") action Function(patch.recode_rpy_files)
-                textbutton _("Undo Changes") action Function(patch.undo)
+            if editor.files_changed:
+                textbutton _("Apply") action Function(editor.recode_rpy_files)
+                textbutton _("Undo Changes") action Function(editor.undo)
+            textbutton _("Open file") action ShowMenu('openfile')
 
         textbutton _("Back") action Rollback()
         textbutton _("History") action ShowMenu('history')
