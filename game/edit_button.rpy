@@ -70,22 +70,28 @@ init -1500 python in _editor:
         def gotoline(self, lineno):
             return min(max(lineno, self.data.firstline), self.data.lastline-self.cursor[1]-1)
 
-        def UP(self):
-            self.lnr = self.gotoline(self.lnr - (self.cursor[1] == self.data.firstline))
-            self.cursor[1] = max(self.cursor[1] - 1, 0)
+        def UP(self, sub=1):
+            if self.cursor[1] + self.lnr - sub >= 0:
+                if self.cursor[1] - sub >= 0:
+                    self.cursor[1] -= sub
+                else:
+                    self.lnr -= sub
 
-        def DOWN(self):
-            self.cursor[1] = min(self.cursor[1] + 1, self.nolines)
-            self.lnr = self.gotoline(self.lnr + (self.cursor[1] == self.nolines))
+        def DOWN(self, add=1):
+            if self.cursor[1] + self.lnr + add < self.data.lastline:
+                if self.cursor[1] + add < self.nolines:
+                    self.cursor[1] += add
+                else:
+                    self.lnr += add
 
-        def PAGEUP(self): self.lnr = self.gotoline(self.lnr - self.nolines)
-        def PAGEDOWN(self): self.lnr = self.gotoline(self.lnr + self.nolines)
+        def PAGEUP(self): self.UP(self.nolines)
+        def PAGEDOWN(self): self.DOWN(self.nolines)
 
         def ctrl_HOME(self): self.lnr = self.gotoline(self.data.firstline)
         def ctrl_END(self): self.lnr = self.gotoline(self.data.lastline)
 
-        def mousedown_4(self): self.lnr = self.gotoline(self.lnr - self.wheel_scroll_lines)
-        def mousedown_5(self): self.lnr = self.gotoline(self.lnr + self.wheel_scroll_lines)
+        def mousedown_4(self): self.UP(3)
+        def mousedown_5(self): self.DOWN(3)
 
     class EditView(TextView):
 
@@ -202,8 +208,8 @@ init -1500 python in _editor:
         def event(self, ev, x, y, st):
             import pygame
             if ev.type == pygame.MOUSEBUTTONDOWN:
-                self.max = int(x * 114 / config.screen_width)
-                self.at[1] = int(y * 31 / config.screen_height)
+                self.max = int(x * 113.3 / config.screen_width)
+                self.at[1] = int(y * 31.5 / config.screen_height)
 
                 if self.view.lnr + self.at[1] >= self.view.data.lastline:
                     self.at[1] -= self.view.lnr + self.at[1] - self.view.data.lastline + 1
@@ -224,18 +230,20 @@ init -1500 python in _editor:
             self.view = self.fl[fname]
             self.is_visible = True
 
-        def apply(self, release=False):
+        def exit(self, discard=False, apply=False, release=False):
             """
             Applied changes are not visible until restart (FIXME). with release set, a restart is triggered.
             """
-            self.view.serialize()
             self.is_visible = False
-            if release:
-                raise renpy.game.UtterRestartException()
-
-        def discard(self):
-            del(self.fl[self.fname])
-            self.view = None
+            self.at = [0, 0, 0, 0]
+            self.view.lnr = 0
+            if discard:
+                #reload from disk
+                self.view.data.deserialize(self.view.fname)
+            elif apply:
+                self.view.serialize()
+                if release:
+                    raise renpy.game.UtterRestartException()
 
     editor = Editor()
 
@@ -262,8 +270,10 @@ screen editor:
         for keystr in view.keymap:
             key keystr action Function(view.handlekey, keystr)
 
-        key "shift_K_RETURN" action [Function(editor.apply), Return()]
-        key "shift_K_KP_ENTER" action [Function(editor.apply), Return()]
+        key "shift_K_RETURN" action [Function(editor.exit, apply = True), Return()]
+        key "shift_K_KP_ENTER" action [Function(editor.exit, apply = True), Return()]
+
+        key "K_ESCAPE" action [Function(editor.exit), Return()]
 
         key "K_TAB" action Function(view.typekey, "    ")
         key "K_SPACE" action Function(view.typekey, " ")
@@ -304,9 +314,9 @@ screen editor:
 
             if _editor.editor.view.changed:
                 if not renpy.parser.parse_errors:
-                    textbutton _("Apply") action [Function(_editor.editor.apply), Return()]
-                    textbutton _("Release") action Function(_editor.editor.apply, True)
+                    textbutton _("Apply") action [Function(editor.exit, apply = True), Return()]
+                    textbutton _("Release") action Function(editor.exit, apply = True, reload = True)
                 else:
                     textbutton _("Debug") action Function(renpy.parser.report_parse_errors)
-                textbutton _("Suspend") action Return()
-                textbutton _("Cancel") action [Function(editor.discard), Return()]
+                textbutton _("Suspend") action [Function(editor.exit), Return()]
+                textbutton _("Cancel") action [Function(editor.exit, discard = True), Return()]
