@@ -258,7 +258,6 @@ screen quick_menu():
 
         if config.developer and _editor.editor:
             textbutton _("Edit") action [_editor.editor.start(renpy.get_filename_line()), ShowMenu('editor')]
-            textbutton _("External editor") action Function(_editor.editor.view.external_editor, renpy.get_filename_line())
 
         textbutton _("Back") action Rollback()
         textbutton _("History") action ShowMenu('history')

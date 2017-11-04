@@ -22,12 +22,13 @@ init -1500 python in _editor:
 
     class TextData(object):
         firstline = 0
-        def __init__(self):
-            self.buffer = []
+        def __init__(self, fname):
+            self.deserialize(fname)
         @property
         def lastline(self): return len(self.buffer)
 
         def deserialize(self, fname):
+            self.buffer = []
             with open(os.path.join(renpy.config.basedir, fname)) as fh:
                 for line in fh:
                     self.buffer.append(line.rstrip('\r\n'))
@@ -42,12 +43,13 @@ init -1500 python in _editor:
         wheel_scroll_lines = 3
         def __init__(self, console, fname=None, nolines=None, lnr=None, lexer=None, format_style=None, wheel_scroll_lines=None):
             super(TextView, self).__init__()
-            self.data = TextData()
+            self.fname = os.path.join(renpy.config.basedir, fname)
+            self.data = TextData(self.fname)
             self.lnr = lnr if lnr else 0
+            self.lineLenMax = 109
             self.lexer = lexer if lexer else RenPyLexer(stripnl=False)
             self.formater = RenPyFormatter(style=format_style if format_style else 'monokai')
-            self.fname = os.path.join(renpy.config.basedir, fname)
-            self.data.deserialize(self.fname)
+            self.show_errors = ""
             self.parse()
             # XXX default nolines should be relative to window + font size
             self.nolines = nolines if nolines else int(config.screen_height / (34 + style.default.line_leading + style.default.line_spacing)) - 1
@@ -66,6 +68,8 @@ init -1500 python in _editor:
             self.colored_buffer = highlight(self.rpescape(os.linesep.join(self.buffer)), self.lexer, self.formater).split(os.linesep)
             renpy.parser.parse_errors = []
             renpy.parser.parse(self.fname, os.linesep.join(self.buffer))
+            if self.show_errors is not None:
+                self.show_errors = "\n{color=#f00}{size=-10}" + os.linesep.join(renpy.parser.parse_errors) +"{/size}{/color}" if renpy.parser.parse_errors else ""
 
         def gotoline(self, lineno):
             return min(max(lineno, self.data.firstline), self.data.lastline-self.cursor[1]-1)
@@ -182,7 +186,7 @@ init -1500 python in _editor:
 
         def display(self):
             ll = min(self.lnr + self.nolines, self.data.lastline)
-            return self.colorize(os.linesep.join(self.colored_buffer[self.lnr:ll]), self.lnr != 0, ll != self.data.lastline)
+            return self.colorize(os.linesep.join(self.colored_buffer[self.lnr:ll]), self.lnr != 0, ll != self.data.lastline) + (self.show_errors if self.show_errors else "")
 
         def external_editor(self, ctxt, transient=1):
             renpy.exports.launch_editor([ctxt[0]], ctxt[1], transient=transient)
@@ -204,6 +208,10 @@ init -1500 python in _editor:
             dy = height / 31
             C.line((255,255,255,255),(self.at[0]*dx,self.at[1]*dy),(self.at[0]*dx,(self.at[1]+0.95)*dy))
             return R
+
+        def debug(self, do_show=False):
+            self.view.show_errors = "" if do_show else None
+            self.view.parse()
 
         def event(self, ev, x, y, st):
             import pygame
@@ -230,20 +238,18 @@ init -1500 python in _editor:
             self.view = self.fl[fname]
             self.is_visible = True
 
-        def exit(self, discard=False, apply=False, release=False):
+        def exit(self, discard=False, apply=False):
             """
-            Applied changes are not visible until restart (FIXME). with release set, a restart is triggered.
+            Applied changes are not visible until reload (shift+R).
             """
             self.is_visible = False
             self.at = [0, 0, 0, 0]
-            self.view.lnr = 0
             if discard:
                 #reload from disk
                 self.view.data.deserialize(self.view.fname)
+                self.view.parse()
             elif apply:
                 self.view.serialize()
-                if release:
-                    raise renpy.game.UtterRestartException()
 
     editor = Editor()
 
@@ -311,12 +317,12 @@ screen editor:
 
             xalign 0.5
             yalign 1.0
-
-            if _editor.editor.view.changed:
+            if view.changed:
                 if not renpy.parser.parse_errors:
                     textbutton _("Apply") action [Function(editor.exit, apply = True), Return()]
-                    textbutton _("Release") action Function(editor.exit, apply = True, reload = True)
+                elif view.show_errors is None:
+                    textbutton _("Debug") action Function(editor.debug, True)
                 else:
-                    textbutton _("Debug") action Function(renpy.parser.report_parse_errors)
-                textbutton _("Suspend") action [Function(editor.exit), Return()]
+                    textbutton _("Silence") action Function(editor.debug)
                 textbutton _("Cancel") action [Function(editor.exit, discard = True), Return()]
+            textbutton _("Visual") action [Function(editor.exit), Return()]
