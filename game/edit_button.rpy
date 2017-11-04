@@ -78,7 +78,7 @@ init -1500 python in _editor:
             if self.cursor[1] + self.lnr - sub >= 0:
                 if self.cursor[1] - sub >= 0:
                     self.cursor[1] -= sub
-                else:
+                elif self.lnr - sub >= 0:
                     self.lnr -= sub
 
         def DOWN(self, add=1):
