@@ -21,22 +21,7 @@ init -1500 python in _editor:
     from renpyformatter import RenPyFormatter
     from pygments.styles import get_style_by_name
 
-    class Cursor(renpy.Displayable):
-        def __init__(self, *a, **b):
-            super(Cursor, self).__init__(a, b)
-            self.at = [0, 0, 0, 0] # last two are meant for dragging
-            self.max = 0xffff
-
-        def render(self, width, height, st, at):
-            R = renpy.Render(width, height)
-            C = R.canvas()
-            dx = int(width / 110)
-            dy = int(height / 31)
-            C.line((255,255,255,255),(self.at[0]*dx,self.at[1]*dy),(self.at[0]*dx,(self.at[1]+0.95)*dy))
-            return R
-
     class TextData(object):
-        y = 0
         firstline = 0
         def __init__(self):
             self.buffer = []
@@ -53,12 +38,10 @@ init -1500 python in _editor:
         def rpescape(self, string): return re.sub(r'(?<!\{)(\{(\{\{)*)(?!\{)', r'{\1', re.sub(r'(?<!\[)(\[(\[\[)*)(?!\[)', r'[\1', string))
         def _list_keymap(self, km, n, mod): return [mod+'K_'+k for k in km] + ['repeat_'+mod+'K_'+k for k in km] + n
         def repeat_keymap(self, km = [], n = [], mod=''): self.keymap.update(self._list_keymap(km, n, mod))
-        def remove_repeat_keymap(self, km = [], n = [], mod=''): self.keymap.difference_update(self._list_keymap(km, n, mod))
-        #def all_subclasses(self, cls): return cls.__subclasses__() + [g for s in cls.__subclasses__() for g in self.all_subclasses(s)]
 
     class TextView(rpio):
         wheel_scroll_lines = 3
-        def __init__(self, fname=None, nolines=None, lnr=None, lexer=None, format_style=None, wheel_scroll_lines=None):
+        def __init__(self, console, fname=None, nolines=None, lnr=None, lexer=None, format_style=None, wheel_scroll_lines=None):
             super(TextView, self).__init__()
             self.data = TextData()
             self.lnr = lnr if lnr else 0
@@ -66,21 +49,21 @@ init -1500 python in _editor:
             self.formater = RenPyFormatter(style=format_style if format_style else 'monokai')
             self.fname = os.path.join(renpy.config.basedir, fname)
             self.data.deserialize(self.fname)
-            self.repygment()
+            self.parse()
             # XXX default nolines should be relative to window + font size
             self.nolines = nolines if nolines else int(config.screen_height / (34 + style.default.line_leading + style.default.line_spacing)) - 1
             self.repeat_keymap(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['mousedown_4', 'mousedown_5'])
             self.repeat_keymap(["HOME", "END"], mod="ctrl_")
-            self.Cursor = Cursor()
+            self.console = console
 
         @property
         def buffer(self): return self.data.buffer
         @property
         def line(self): return self.buffer[self.lnr+self.cursor[1]]
         @property
-        def cursor(self): return self.Cursor.at
+        def cursor(self): return self.console.at
 
-        def repygment(self):
+        def parse(self):
             self.colored_buffer = highlight(self.rpescape(os.linesep.join(self.buffer)), self.lexer, self.formater).split(os.linesep)
             renpy.parser.parse_errors = []
             renpy.parser.parse(self.fname, os.linesep.join(self.buffer))
@@ -121,11 +104,11 @@ init -1500 python in _editor:
             self.oSymUpp = r'~_+{}|:"<>?'
             self.changed = False
 
-        def LEFT(self): self.Cursor.max = max(self.cursor[0] - 1, 0)
-        def RIGHT(self): self.Cursor.max = min(self.cursor[0] + 1, len(self.line))
+        def LEFT(self): self.console.max = max(self.cursor[0] - 1, 0)
+        def RIGHT(self): self.console.max = min(self.cursor[0] + 1, len(self.line))
 
-        def HOME(self): self.Cursor.max = 0
-        def END(self): self.Cursor.max = 0xffff # FIXME: what to do with very long lines?
+        def HOME(self): self.console.max = 0
+        def END(self): self.console.max = 0xffff # FIXME: what to do with very long lines?
 
         def RETURN(self): # FIXME
             self.DOWN()
@@ -142,15 +125,15 @@ init -1500 python in _editor:
             self.changed = True
             if self.cursor[0] == 0:
                 if self.lnr + self.cursor[1] != 0: #FIXME
-                    self.Cursor.max = len(self.buffer[y - 1])
+                    self.console.max = len(self.buffer[y - 1])
                     self.buffer[y - 1] += self.buffer[y]
                     del self.buffer[y]
                     self.UP()
             else:
                 self.LEFT()
-                self.cursor[0] = min(self.Cursor.max, len(self.line))
+                self.cursor[0] = min(self.console.max, len(self.line))
                 self.DELETE()
-            self.repygment()
+            self.parse()
 
         def DELETE(self):
             x = self.cursor[0]
@@ -160,25 +143,25 @@ init -1500 python in _editor:
             if x != len(self.line):
                 self.buffer[y] = buf[:x] + buf[x+1:]
             elif y != self.nolines:
-                self.Cursor.max = len(buf)
+                self.console.max = len(buf)
                 self.buffer[y] += self.buffer[y+1]
                 del self.buffer[y+1]
-            self.repygment()
+            self.parse()
 
         def typekey(self, c):
             x = self.cursor[0]
             buf = self.buffer[self.lnr+self.cursor[1]]
             self.buffer[self.lnr+self.cursor[1]] = buf[:x] + c + buf[x:]
-            self.Cursor.max += 1
-            self.cursor[0] = min(self.Cursor.max, len(self.line))
-            renpy.redraw(self.Cursor, 0)
+            self.console.max += 1
+            self.cursor[0] = min(self.console.max, len(self.line))
+            renpy.redraw(self.console, 0)
             self.changed = True
-            self.repygment()
+            self.parse()
 
         def handlekey(self, keystr):
             getattr(self, re.sub(r'^(?:repeat_)?(ctrl_|meta_|alt_|)K_', r'\1', keystr))()
-            self.cursor[0] = min(self.Cursor.max, len(self.line))
-            renpy.redraw(self.Cursor, 0)
+            self.cursor[0] = min(self.console.max, len(self.line))
+            renpy.redraw(self.console, 0)
 
         def serialize(self):
             if self.changed:
@@ -196,39 +179,55 @@ init -1500 python in _editor:
             ll = min(self.lnr + self.nolines, self.data.lastline)
             return self.colorize(os.linesep.join(self.colored_buffer[self.lnr:ll]), self.lnr != 0, ll != self.data.lastline)
 
-        def get_ypos(self):
-            return min(self.cursor[1], self.nolines) * self.fontsize;
-
         def external_editor(self, ctxt, transient=1):
             renpy.exports.launch_editor([ctxt[0]], ctxt[1], transient=transient)
 
-    class Editor(rpio):
-        def __init__(self):
-            super(Editor, self).__init__()
+    class Editor(renpy.Displayable):
+        def __init__(self, *a, **b):
+            super(Editor, self).__init__(a, b)
+            self.at = [0, 0, 0, 0] # last two are meant for dragging
+            self.max = 0xffff
             self.fl = {}
+            self.fname = None
             self.is_visible = False
             self.view = None
+
+        def render(self, width, height, st, at):
+            R = renpy.Render(width, height)
+            C = R.canvas()
+            dx = width / 110
+            dy = height / 31
+            C.line((255,255,255,255),(self.at[0]*dx,self.at[1]*dy),(self.at[0]*dx,(self.at[1]+0.95)*dy))
+            return R
+
+        def event(self, ev, x, y, st):
+            import pygame
 
         def start(self, ctxt, offset=2):
             (fname, lnr) = ctxt
             lnr = lnr - 1 if fname else 0 # no fname indicates failure
+            self.fname = fname
 
             if fname not in self.fl:
-                self.fl[fname] = EditView(fname=fname, lnr=lnr)
+                self.fl[fname] = EditView(console=self, fname=fname, lnr=lnr)
             else:
                 self.view.lnr = lnr
                 self.view.handlekey("END")
             self.view = self.fl[fname]
             self.is_visible = True
 
-        def apply(self, do_debug=True):
+        def apply(self, release=False):
+            """
+            Applied changes are not visible until restart (FIXME). with release set, a restart is triggered.
+            """
             self.view.serialize()
             self.is_visible = False
-            raise renpy.game.UtterRestartException()
+            if release:
+                raise renpy.game.UtterRestartException()
 
-        def interact(self):
-            renpy.show_screen("_editor", self.view)
-            line = ui.interact()
+        def discard(self):
+            del(self.fl[self.fname])
+            self.view = None
 
     editor = Editor()
 
@@ -245,17 +244,18 @@ style editor_frame:
 
 screen editor:
     style_prefix "editor"
-    default view = _editor.editor.view
+    default editor = _editor.editor
+    default view = editor.view
     frame:
 
-        add view.Cursor
-        text view.display() style "editor" id "lines"
+        add editor
+        text editor.view.display() style "editor"
 
         for keystr in view.keymap:
             key keystr action Function(view.handlekey, keystr)
 
-        key "shift_K_RETURN" action [Function(_editor.editor.apply), Return()]
-        key "shift_K_KP_ENTER" action [Function(_editor.editor.apply), Return()]
+        key "shift_K_RETURN" action [Function(editor.apply), Return()]
+        key "shift_K_KP_ENTER" action [Function(editor.apply), Return()]
 
         key "K_TAB" action Function(view.typekey, "    ")
         key "K_SPACE" action Function(view.typekey, " ")
@@ -297,6 +297,8 @@ screen editor:
             if _editor.editor.view.changed:
                 if not renpy.parser.parse_errors:
                     textbutton _("Apply") action [Function(_editor.editor.apply), Return()]
+                    textbutton _("Release") action Function(_editor.editor.apply, True)
                 else:
                     textbutton _("Debug") action Function(renpy.parser.report_parse_errors)
-                textbutton _("Cancel") action Return()
+                textbutton _("Suspend") action Return()
+                textbutton _("Cancel") action [Function(editor.discard), Return()]
