@@ -1,4 +1,14 @@
-init python:
+init -1500 python:
+    import re
+
+    style.editor = Style(style.default)
+
+    # must be monospace or need/add shadow
+    style.editor.font = "Inconsolata-Regular.ttf"
+
+init -1500 python in _editor:
+    from store import config, style
+    import store
     import os
     import re
     import shutil
@@ -6,18 +16,10 @@ init python:
     from tempfile import mkstemp
     import math
 
-    has_renpyformatter = True
-    try:
-        from pygments import highlight
-        from renpy_lexer import RenPyLexer
-        from renpyformatter import RenPyFormatter
-        from pygments.styles import get_style_by_name
-    except ImportError:
-        has_renpyformatter = False
-
-    style.editor = Style(style.default)
-    # must be monospace or need/add shadow
-    style.editor.font = "Inconsolata-Regular.ttf"
+    from pygments import highlight
+    from renpy_lexer import RenPyLexer
+    from renpyformatter import RenPyFormatter
+    from pygments.styles import get_style_by_name
 
     class Cursor(renpy.Displayable):
         def __init__(self, *a, **b):
@@ -62,8 +64,8 @@ init python:
             self.lnr = lnr if lnr else 0
             self.lexer = lexer if lexer else RenPyLexer(stripnl=False)
             self.formater = RenPyFormatter(style=format_style if format_style else 'monokai')
-            self.data.deserialize(fname)
-            self.fname = fname
+            self.fname = os.path.join(renpy.config.basedir, fname)
+            self.data.deserialize(self.fname)
             self.repygment()
             # XXX default nolines should be relative to window + font size
             self.nolines = nolines if nolines else int(config.screen_height / (34 + style.default.line_leading + style.default.line_spacing)) - 1
@@ -80,6 +82,8 @@ init python:
 
         def repygment(self):
             self.colored_buffer = highlight(self.rpescape(os.linesep.join(self.buffer)), self.lexer, self.formater).split(os.linesep)
+            renpy.parser.parse_errors = []
+            renpy.parser.parse(self.fname, os.linesep.join(self.buffer))
 
         def gotoline(self, lineno):
             return min(max(lineno, self.data.firstline), self.data.lastline-self.cursor[1]-1)
@@ -143,7 +147,9 @@ init python:
                     del self.buffer[y]
                     self.UP()
             else:
-                self.buffer[y] = self.line[:-1]
+                self.LEFT()
+                self.cursor[0] = min(self.Cursor.max, len(self.line))
+                self.DELETE()
             self.repygment()
 
         def DELETE(self):
@@ -170,6 +176,7 @@ init python:
             self.repygment()
 
         def handlekey(self, keystr):
+            getattr(self, re.sub(r'^(?:repeat_)?(ctrl_|meta_|alt_|)K_', r'\1', keystr))()
             self.cursor[0] = min(self.Cursor.max, len(self.line))
             renpy.redraw(self.Cursor, 0)
 
@@ -179,27 +186,8 @@ init python:
                 for line in self.buffer:
                     os.write(fh, line + os.linesep)
                 os.close(fh)
-                shutil.move(abs_path, os.path.join(renpy.config.basedir, self.fname))
+                shutil.move(abs_path, self.fname)
                 self.changed = False
-
-        def context_lines(self):
-            # copied from old code, was it missing? - see _update()
-            s = max(self.lnr - self.nolines, 1)
-            e = min(s + self.nolines + 1, len(self.buffer))
-
-            #pygments strips leading whitespace. prevent this.
-            lines = ""
-            while s != e and self.buffer[s].rstrip('\r\n') == "":
-                lines += self.buffer[s]
-                s += 1
-            if has_renpyformatter:
-                lines += highlight("".join(self.buffer[s:e]), self.lexer, RenPyFormatter(style='monokai'))
-            else:
-                for i in range(s, e):
-                    alpha = -min(0.8, 0.1 * math.log(abs(i-self.lnr) + 1))
-                    lines += ("{alpha=%.2f}" % alpha) + self.buffer[i] + "{/alpha}"
-            return lines
-
 
         def colorize(self, txt, at_start=False, at_end=False):
             return ('{color=#000000}' if at_start else '') + txt + ('{/color}' if at_end else '')
@@ -211,106 +199,43 @@ init python:
         def get_ypos(self):
             return min(self.cursor[1], self.nolines) * self.fontsize;
 
-        def external_editor(self, transient=1):
-            renpy.exports.launch_editor([self.fname], self.lnr, transient=transient)
+        def external_editor(self, ctxt, transient=1):
+            renpy.exports.launch_editor([ctxt[0]], ctxt[1], transient=transient)
 
     class Editor(rpio):
-        def __init__(self, fname=None):
+        def __init__(self):
             super(Editor, self).__init__()
             self.fl = {}
-            self._createview(fname)
+            self.is_visible = False
+            self.view = None
 
-        def _createview(self, fname, offset=2):
-            if fname is None:
-                (fname, lnr) = renpy.get_filename_line()
+        def start(self, ctxt, offset=2):
+            (fname, lnr) = ctxt
             lnr = lnr - 1 if fname else 0 # no fname indicates failure
 
             if fname not in self.fl:
                 self.fl[fname] = EditView(fname=fname, lnr=lnr)
+            else:
+                self.view.lnr = lnr
+                self.view.handlekey("END")
             self.view = self.fl[fname]
+            self.is_visible = True
 
-        def handlekey(self, keystr):
-            getattr(self.view, re.sub(r'^(?:repeat_)?(ctrl_|meta_|alt_|)K_', r'\1', keystr))()
-            if hasattr(self.view, "handlekey"):
-                self.view.handlekey(keystr)
+        def apply(self, do_debug=True):
+            self.view.serialize()
+            self.is_visible = False
+            raise renpy.game.UtterRestartException()
 
-    def linkhandler(target):
-        # the dfault handler:
-        m = re.match('^([a-zA-Z_][\w.]*)\s*\(.*\)$', target)
-        if m and callable(m.group(1)):
-            eval(m.group(0))
-        elif ":" in target:
-            try:
-                import webbrowser
-                webbrowser.open(target)
-            except:
-                pass
-        else:
-            renpy.call_in_new_context(target)
+        def interact(self):
+            renpy.show_screen("_editor", self.view)
+            line = ui.interact()
 
-    def hyperlink_styler(target):
-        return style.hyperlink_text
+    editor = Editor()
 
-    def get_filetree(dir=renpy.config.gamedir, extension=('.py','.rpy')):
-        list = []
-        i = len(renpy.config.gamedir) + 1
-        for path, dirs, files in os.walk(dir):
-            for file in files:
-                if file.endswith(extension):
-                    list.append(os.path.join(path[i:], file))
-        return list
+init 1701 python in _editor:
 
-    class Clicker(object):
-        links = {}
-        def __init_(self):
-            self.orig_hln_cb = config.hyperlink_callback
-            #config.hyperlink_callback = self.clicked
-
-        def clickify(self, links):
-            for f in links:
-                self.links[f] = True
-            return os.linesep.join(["{a="+f+"}"+f+"{/a}" for f in links])
-        def clicked(self, link):
-            devlog.info(link)
-
-screen openfile():
-    frame:
-        default filetree = get_filetree()
-        default nolines = 30
-        default firstline = 0
-        default lastline = max(0, len(filetree) - nolines)
-        default lnr = 0
-        xpadding 10
-        ypadding 10
-        xpos 100
-        background "#272822"
-        $ clicker = Clicker()
-
-        text clicker.clickify(filetree[lnr:(min(lnr, lastline)+nolines)]) style "editor"
-
-        key "K_UP" action SetScreenVariable("lnr", max(lnr - 1, firstline))
-        key "K_DOWN" action SetScreenVariable("lnr", min(lnr + 1, lastline))
-        key "repeat_K_UP" action SetScreenVariable("lnr", max(lnr - 1, firstline))
-        key "repeat_K_DOWN" action SetScreenVariable("lnr", min(lnr + 1, lastline))
-
-        key "K_HOME" action SetScreenVariable("lnr", firstline)
-        key "K_END" action SetScreenVariable("lnr", lastline)
-
-        key "K_PAGEUP" action SetScreenVariable("lnr", max(lnr-nolines, firstline))
-        key "K_PAGEDOWN" action SetScreenVariable("lnr", min(lnr+nolines, lastline))
-
-        key "repeat_K_PAGEUP" action SetScreenVariable("lnr", max(lnr-nolines, firstline))
-        key "repeat_K_PAGEDOWN" action SetScreenVariable("lnr", min(lnr+nolines, lastline))
-
-        hbox:
-            style_prefix "quick"
-
-            xalign 0.5
-            yalign 1.0
-            if editor.view.changed:
-                textbutton _("Apply") action Function(editor.view.serialize)
-            #textbutton _("Screenshot") action Function(renpy.screenshot, '/tmp/ed.png')
-            textbutton _("Cancel") action Return()
+    if config.developer or config.editor:
+        editor = Editor()
 
 style editor_frame:
         xpadding 10
@@ -318,54 +243,60 @@ style editor_frame:
         xpos 0
         background "#272822"
 
-screen edit():
+screen editor:
     style_prefix "editor"
+    default view = _editor.editor.view
     frame:
 
-        #add Input(default=editor.view.caret, changed=editor.view._update, ypos=editor.view.get_ypos(), style=style.editor) id "input"
-        add editor.view.Cursor
-        text editor.view.display() style "editor" id "lines"
+        add view.Cursor
+        text view.display() style "editor" id "lines"
 
-        for keystr in editor.view.keymap:
-            key keystr action Function(editor.handlekey, keystr)
+        for keystr in view.keymap:
+            key keystr action Function(view.handlekey, keystr)
 
-        key "K_KP_ENTER" action Function(editor.handlekey, "RETURN")
-        key "K_TAB" action Function(editor.view.typekey, "\t")
-        key "K_SPACE" action Function(editor.view.typekey, " ")
+        key "shift_K_RETURN" action [Function(_editor.editor.apply), Return()]
+        key "shift_K_KP_ENTER" action [Function(_editor.editor.apply), Return()]
 
-        for i in xrange(0, len(editor.view.oSymName)):
-            key "K_"+editor.view.oSymName[i] action Function(editor.view.typekey, editor.view.oSymLow[i])
-            key "shift_K_"+editor.view.oSymName[i] action Function(editor.view.typekey, editor.view.oSymUpp[i])
-            key "repeat_K_"+editor.view.oSymName[i] action Function(editor.view.typekey, editor.view.oSymLow[i])
-            key "repeat_shift_K_"+editor.view.oSymName[i] action Function(editor.view.typekey, editor.view.oSymUpp[i])
+        key "K_TAB" action Function(view.typekey, "    ")
+        key "K_SPACE" action Function(view.typekey, " ")
+        key "repeat_K_SPACE" action Function(view.typekey, " ")
+
+        for i in xrange(0, len(view.oSymName)):
+            key "K_"+view.oSymName[i] action Function(view.typekey, view.oSymLow[i])
+            key "shift_K_"+view.oSymName[i] action Function(view.typekey, view.oSymUpp[i])
+            key "repeat_K_"+view.oSymName[i] action Function(view.typekey, view.oSymLow[i])
+            key "repeat_shift_K_"+view.oSymName[i] action Function(view.typekey, view.oSymUpp[i])
 
         for nr in xrange(0, 10):
-            key "K_"+str(nr) action Function(editor.view.typekey, str(nr))
-            key "K_KP"+str(nr) action Function(editor.view.typekey, str(nr))
-            key "repeat_K_"+str(nr) action Function(editor.view.typekey, str(nr))
-            key "repeat_K_KP"+str(nr) action Function(editor.view.typekey, str(nr))
-            key "shift_K_"+str(nr) action Function(editor.view.typekey, editor.view.nrSymbol[nr])
-            key "repeat_shift_K_"+str(nr) action Function(editor.view.typekey, editor.view.nrSymbol[nr])
-        for c in xrange(ord('a'), ord('z')+1):
-            key "K_"+chr(c) action Function(editor.view.typekey, chr(c))
-            key "shift_K_"+chr(c) action Function(editor.view.typekey, chr(c).upper())
-            key "repeat_K_"+chr(c) action Function(editor.view.typekey, chr(c))
-            key "repeat_shift_K_"+chr(c) action Function(editor.view.typekey, chr(c).upper())
+            key "K_"+str(nr) action Function(view.typekey, str(nr))
+            key "K_KP"+str(nr) action Function(view.typekey, str(nr))
+            key "repeat_K_"+str(nr) action Function(view.typekey, str(nr))
+            key "repeat_K_KP"+str(nr) action Function(view.typekey, str(nr))
+            key "shift_K_"+str(nr) action Function(view.typekey, view.nrSymbol[nr])
+            key "repeat_shift_K_"+str(nr) action Function(view.typekey, view.nrSymbol[nr])
 
-        key "K_KP_PERIOD" action Function(editor.view.typekey, ".")
-        key "K_KP_DIVIDE" action Function(editor.view.typekey, "/")
-        key "K_KP_MULTIPLY" action Function(editor.view.typekey, "*")
-        key "K_KP_MINUS" action Function(editor.view.typekey, "-")
-        key "K_KP_PLUS" action Function(editor.view.typekey, "+")
-        key "K_KP_EQUALS" action Function(editor.view.typekey, "=")
+        for c in xrange(ord('a'), ord('z')+1):
+            key "K_"+chr(c) action Function(view.typekey, chr(c))
+            key "shift_K_"+chr(c) action Function(view.typekey, chr(c).upper())
+            key "repeat_K_"+chr(c) action Function(view.typekey, chr(c))
+            key "repeat_shift_K_"+chr(c) action Function(view.typekey, chr(c).upper())
+
+        key "K_KP_PERIOD" action Function(view.typekey, ".")
+        key "K_KP_DIVIDE" action Function(view.typekey, "/")
+        key "K_KP_MULTIPLY" action Function(view.typekey, "*")
+        key "K_KP_MINUS" action Function(view.typekey, "-")
+        key "K_KP_PLUS" action Function(view.typekey, "+")
+        key "K_KP_EQUALS" action Function(view.typekey, "=")
+
         hbox:
             style_prefix "quick"
 
             xalign 0.5
             yalign 1.0
-            if editor.view.changed:
-                textbutton _("Apply") action [Function(editor.view.serialize), Function(renpy.exports.rollback, force=True)]
-            textbutton _("Open file") action ShowMenu('openfile')
-            textbutton _("External editor") action Function(editor.view.external_editor)
-            #textbutton _("Screenshot") action Function(renpy.screenshot, '/tmp/ed.png')
-            textbutton _("Cancel") action Return()
+
+            if _editor.editor.view.changed:
+                if not renpy.parser.parse_errors:
+                    textbutton _("Apply") action [Function(_editor.editor.apply), Return()]
+                else:
+                    textbutton _("Debug") action Function(renpy.parser.report_parse_errors)
+                textbutton _("Cancel") action Return()

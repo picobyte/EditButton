@@ -40,9 +40,7 @@ define gui.about = _("")
 
 define build.name = "EditButton"
 
-define config.hyperlink_callback = linkhandler
 
-define config.hyperlink_styler = hyperlink_styler
 
 ## Sounds and music ############################################################
 

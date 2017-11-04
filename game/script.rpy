@@ -8,8 +8,6 @@ define e = Character('Eileen')
 ## The game starts here.
 
 label start:
-    if not hasattr(renpy.store,'editor'):
-        $editor = Editor()
 
     ## Show a background. This uses a placeholder by default, but you can add a
     ## file (named either "bg room.png" or "bg room.jpg") to the images
