@@ -1,5 +1,4 @@
 init -1500 python:
-    import re
 
     style.editor = Style(style.default)
 
@@ -72,7 +71,7 @@ init -1500 python in _editor:
             return min(max(lineno, self.data.firstline), self.data.lastline-self.cursor[1]-1)
 
         def UP(self):
-            self.lnr = self.gotoline(self.lnr - (self.cursor[1] == 0))
+            self.lnr = self.gotoline(self.lnr - (self.cursor[1] == self.data.firstline))
             self.cursor[1] = max(self.cursor[1] - 1, 0)
 
         def DOWN(self):
@@ -202,6 +201,15 @@ init -1500 python in _editor:
 
         def event(self, ev, x, y, st):
             import pygame
+            if ev.type == pygame.MOUSEBUTTONDOWN:
+                self.max = int(x * 114 / config.screen_width)
+                self.at[1] = int(y * 31 / config.screen_height)
+
+                if self.view.lnr + self.at[1] >= self.view.data.lastline:
+                    self.at[1] -= self.view.lnr + self.at[1] - self.view.data.lastline + 1
+
+                self.at[0] = min(self.max, len(self.view.buffer[self.view.lnr+self.at[1]]))
+                renpy.redraw(self, 0)
 
         def start(self, ctxt, offset=2):
             (fname, lnr) = ctxt
