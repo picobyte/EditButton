@@ -52,7 +52,7 @@ init -1500 python in _editor:
             self.show_errors = ""
             self.parse()
             # XXX default nolines should be relative to window + font size
-            self.nolines = nolines if nolines else int(config.screen_height / (34 + style.default.line_leading + style.default.line_spacing)) - 1
+            self._nolines = nolines if nolines else int(config.screen_height / (34 + style.default.line_leading + style.default.line_spacing)) - 1
             self.repeat_keymap(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['mousedown_4', 'mousedown_5'])
             self.repeat_keymap(["HOME", "END"], mod="ctrl_")
             self.console = console
@@ -60,9 +60,18 @@ init -1500 python in _editor:
         @property
         def buffer(self): return self.data.buffer
         @property
-        def line(self): return self.buffer[self.lnr+self.cursor[1]]
+        def line(self): return self.buffer[self.lnr+self.console.cy]
+
         @property
-        def cursor(self): return self.console.at
+        def nolines(self):
+            # for each in displaybuffer,
+            nolines = 0
+            for i in xrange(self.lnr, min(self.lnr + self._nolines, self.data.lastline)):
+                line_wraps = int(len(self.buffer[i])/self.lineLenMax) + 1
+                if nolines + line_wraps > self._nolines:
+                    break
+                nolines += line_wraps
+            return nolines
 
         def parse(self):
             self.colored_buffer = highlight(self.rpescape(os.linesep.join(self.buffer)), self.lexer, self.formater).split(os.linesep)
@@ -72,18 +81,18 @@ init -1500 python in _editor:
                 self.show_errors = "\n{color=#f00}{size=-10}" + os.linesep.join(renpy.parser.parse_errors) +"{/size}{/color}" if renpy.parser.parse_errors else ""
 
         def gotoline(self, lineno):
-            return min(max(lineno, self.data.firstline), self.data.lastline-self.cursor[1]-1)
+            return min(max(lineno, self.data.firstline), self.data.lastline-self.console.cy-1)
 
         def UP(self, sub=1):
-            sub = min(self.cursor[1] + self.lnr, sub)
-            part = min(self.cursor[1], sub)
-            self.cursor[1] -= part
+            sub = min(self.console.cy + self.lnr, sub)
+            part = min(self.console.cy, sub)
+            self.console.cy -= part
             self.lnr -= sub - part
 
         def DOWN(self, add=1):
-            add = min(add, self.data.lastline - self.cursor[1] - self.lnr - 1)
-            part = min(self.nolines - self.cursor[1] - 1, add)
-            self.cursor[1] += part
+            add = min(add, self.data.lastline - self.console.cy - self.lnr - 1)
+            part = min(self.nolines - self.console.cy - 1, add)
+            self.console.cy += part
             self.lnr += add - part
 
         def PAGEUP(self): self.UP(self.nolines)
@@ -111,16 +120,16 @@ init -1500 python in _editor:
             self.oSymUpp = r'~_+{}|:"<>?'
             self.changed = False
 
-        def LEFT(self): self.console.max = max(self.cursor[0] - 1, 0)
-        def RIGHT(self): self.console.max = min(self.cursor[0] + 1, len(self.line))
+        def LEFT(self, sub=1): self.console.max = max(self.console.cx - sub, 0)
+        def RIGHT(self, add=1): self.console.max = min(self.console.cx + add, len(self.line))
 
         def HOME(self): self.console.max = 0
         def END(self): self.console.max = 0xffff # FIXME: what to do with very long lines?
 
         def RETURN(self):
-            y = self.lnr+self.cursor[1]
-            self.buffer.insert(y+1, self.buffer[y][self.cursor[0]:])
-            self.buffer[y] = self.buffer[y][:self.cursor[0]]
+            y = self.lnr+self.console.cy
+            self.buffer.insert(y+1, self.buffer[y][self.console.cx:])
+            self.buffer[y] = self.buffer[y][:self.console.cx]
             self.parse()
             self.changed = True
             self.console.max = 0
@@ -128,24 +137,24 @@ init -1500 python in _editor:
 
         def BACKSPACE(self):
 
-            y = self.lnr+self.cursor[1]
+            y = self.lnr+self.console.cy
 
             self.changed = True
-            if self.cursor[0] == 0:
-                if self.lnr + self.cursor[1] != 0: #FIXME
+            if self.console.cx == 0:
+                if self.lnr + self.console.cy != 0: #FIXME
                     self.console.max = len(self.buffer[y - 1])
                     self.buffer[y - 1] += self.buffer[y]
                     del self.buffer[y]
                     self.UP()
             else:
                 self.LEFT()
-                self.cursor[0] = min(self.console.max, len(self.line))
+                self.console.cx = min(self.console.max, len(self.line))
                 self.DELETE()
             self.parse()
 
         def DELETE(self):
-            x = self.cursor[0]
-            y = self.lnr+self.cursor[1]
+            x = self.console.cx
+            y = self.lnr+self.console.cy
             buf = self.buffer[y]
             self.changed = True
             if x != len(self.line):
@@ -156,19 +165,19 @@ init -1500 python in _editor:
                 del self.buffer[y+1]
             self.parse()
 
-        def typekey(self, c):
-            x = self.cursor[0]
-            buf = self.buffer[self.lnr+self.cursor[1]]
-            self.buffer[self.lnr+self.cursor[1]] = buf[:x] + c + buf[x:]
-            self.console.max += 1
-            self.cursor[0] = min(self.console.max, len(self.line))
+        def insert(self, s):
+            x = self.console.cx
+            buf = self.buffer[self.lnr+self.console.cy]
+            self.buffer[self.lnr+self.console.cy] = buf[:x] + s + buf[x:]
+            self.console.max += len(s)
+            self.console.cx = min(self.console.max, len(self.line))
             renpy.redraw(self.console, 0)
             self.changed = True
             self.parse()
 
         def handlekey(self, keystr):
             getattr(self, re.sub(r'^(?:repeat_)?(ctrl_|meta_|alt_|)K_', r'\1', keystr))()
-            self.cursor[0] = min(self.console.max, len(self.line))
+            self.console.cx = min(self.console.max, len(self.line))
             renpy.redraw(self.console, 0)
 
         def serialize(self):
@@ -193,19 +202,18 @@ init -1500 python in _editor:
     class Editor(renpy.Displayable):
         def __init__(self, *a, **b):
             super(Editor, self).__init__(a, b)
-            self.at = [0, 0, 0, 0] # last two are meant for dragging
             self.max = 0xffff
             self.fl = {}
             self.fname = None
-            self.is_visible = False
             self.view = None
+            self.exit() # sets tis_visible and cursor coords to default
 
         def render(self, width, height, st, at):
             R = renpy.Render(width, height)
             C = R.canvas()
             dx = width / 110
             dy = height / 31
-            C.line((255,255,255,255),(self.at[0]*dx,self.at[1]*dy),(self.at[0]*dx,(self.at[1]+0.95)*dy))
+            C.line((255,255,255,255),(self.cx*dx,self.cy*dy),(self.cx*dx,(self.cy+0.95)*dy))
             return R
 
         def debug(self, do_show=False):
@@ -216,12 +224,12 @@ init -1500 python in _editor:
             import pygame
             if ev.type == pygame.MOUSEBUTTONDOWN:
                 self.max = int(x * 113.3 / config.screen_width)
-                self.at[1] = int(y * 31.5 / config.screen_height)
+                self.cy = int(y * 31.5 / config.screen_height)
 
-                if self.view.lnr + self.at[1] >= self.view.data.lastline:
-                    self.at[1] -= self.view.lnr + self.at[1] - self.view.data.lastline + 1
+                if self.view.lnr + self.cy >= self.view.data.lastline:
+                    self.cy -= self.view.lnr + self.cy - self.view.data.lastline + 1
 
-                self.at[0] = min(self.max, len(self.view.buffer[self.view.lnr+self.at[1]]))
+                self.cx = min(self.max, len(self.view.buffer[self.view.lnr+self.cy]))
                 renpy.redraw(self, 0)
 
         def start(self, ctxt, offset=2):
@@ -233,7 +241,7 @@ init -1500 python in _editor:
                 self.fl[fname] = EditView(console=self, fname=fname, lnr=lnr)
             else:
                 self.view.lnr = lnr
-                self.view.handlekey("END")
+                self.view.handlekey("END") # NB. call via handlekey triggers cursor redraw.
             self.view = self.fl[fname]
             self.is_visible = True
 
@@ -242,7 +250,7 @@ init -1500 python in _editor:
             Applied changes are not visible until reload (shift+R).
             """
             self.is_visible = False
-            self.at = [0, 0, 0, 0]
+            self.cx = self.cy = self.cx2 = self.cy2 = 0 # last two are meant for dragging
             if discard:
                 #reload from disk
                 self.view.data.deserialize(self.view.fname)
@@ -280,36 +288,36 @@ screen editor:
 
         key "K_ESCAPE" action [Function(editor.exit), Return()]
 
-        key "K_TAB" action Function(view.typekey, "    ")
-        key "K_SPACE" action Function(view.typekey, " ")
-        key "repeat_K_SPACE" action Function(view.typekey, " ")
+        key "K_TAB" action Function(view.insert, "    ")
+        key "K_SPACE" action Function(view.insert, " ")
+        key "repeat_K_SPACE" action Function(view.insert, " ")
 
         for i in xrange(0, len(view.oSymName)):
-            key "K_"+view.oSymName[i] action Function(view.typekey, view.oSymLow[i])
-            key "shift_K_"+view.oSymName[i] action Function(view.typekey, view.oSymUpp[i])
-            key "repeat_K_"+view.oSymName[i] action Function(view.typekey, view.oSymLow[i])
-            key "repeat_shift_K_"+view.oSymName[i] action Function(view.typekey, view.oSymUpp[i])
+            key "K_"+view.oSymName[i] action Function(view.insert, view.oSymLow[i])
+            key "shift_K_"+view.oSymName[i] action Function(view.insert, view.oSymUpp[i])
+            key "repeat_K_"+view.oSymName[i] action Function(view.insert, view.oSymLow[i])
+            key "repeat_shift_K_"+view.oSymName[i] action Function(view.insert, view.oSymUpp[i])
 
         for nr in xrange(0, 10):
-            key "K_"+str(nr) action Function(view.typekey, str(nr))
-            key "K_KP"+str(nr) action Function(view.typekey, str(nr))
-            key "repeat_K_"+str(nr) action Function(view.typekey, str(nr))
-            key "repeat_K_KP"+str(nr) action Function(view.typekey, str(nr))
-            key "shift_K_"+str(nr) action Function(view.typekey, view.nrSymbol[nr])
-            key "repeat_shift_K_"+str(nr) action Function(view.typekey, view.nrSymbol[nr])
+            key "K_"+str(nr) action Function(view.insert, str(nr))
+            key "K_KP"+str(nr) action Function(view.insert, str(nr))
+            key "repeat_K_"+str(nr) action Function(view.insert, str(nr))
+            key "repeat_K_KP"+str(nr) action Function(view.insert, str(nr))
+            key "shift_K_"+str(nr) action Function(view.insert, view.nrSymbol[nr])
+            key "repeat_shift_K_"+str(nr) action Function(view.insert, view.nrSymbol[nr])
 
         for c in xrange(ord('a'), ord('z')+1):
-            key "K_"+chr(c) action Function(view.typekey, chr(c))
-            key "shift_K_"+chr(c) action Function(view.typekey, chr(c).upper())
-            key "repeat_K_"+chr(c) action Function(view.typekey, chr(c))
-            key "repeat_shift_K_"+chr(c) action Function(view.typekey, chr(c).upper())
+            key "K_"+chr(c) action Function(view.insert, chr(c))
+            key "shift_K_"+chr(c) action Function(view.insert, chr(c).upper())
+            key "repeat_K_"+chr(c) action Function(view.insert, chr(c))
+            key "repeat_shift_K_"+chr(c) action Function(view.insert, chr(c).upper())
 
-        key "K_KP_PERIOD" action Function(view.typekey, ".")
-        key "K_KP_DIVIDE" action Function(view.typekey, "/")
-        key "K_KP_MULTIPLY" action Function(view.typekey, "*")
-        key "K_KP_MINUS" action Function(view.typekey, "-")
-        key "K_KP_PLUS" action Function(view.typekey, "+")
-        key "K_KP_EQUALS" action Function(view.typekey, "=")
+        key "K_KP_PERIOD" action Function(view.insert, ".")
+        key "K_KP_DIVIDE" action Function(view.insert, "/")
+        key "K_KP_MULTIPLY" action Function(view.insert, "*")
+        key "K_KP_MINUS" action Function(view.insert, "-")
+        key "K_KP_PLUS" action Function(view.insert, "+")
+        key "K_KP_EQUALS" action Function(view.insert, "=")
 
         hbox:
             style_prefix "quick"
