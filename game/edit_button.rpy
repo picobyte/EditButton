@@ -119,13 +119,14 @@ init -1500 python in _editor:
         def HOME(self): self.console.max = 0
         def END(self): self.console.max = 0xffff # FIXME: what to do with very long lines?
 
-        def RETURN(self): # FIXME
-            self.DOWN()
-            #self.cursor[0] = 0
+        def RETURN(self):
             y = self.lnr+self.cursor[1]
-            self.buffer.insert(y, '')
-            self.colored_buffer.insert(y, self.colorize('', self.lnr != 0))
+            self.buffer.insert(y+1, self.buffer[y][self.cursor[0]:])
+            self.buffer[y] = self.buffer[y][:self.cursor[0]]
+            self.parse()
             self.changed = True
+            self.console.max = 0
+            self.handlekey("DOWN")
 
         def BACKSPACE(self):
 
