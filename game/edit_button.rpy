@@ -75,18 +75,16 @@ init -1500 python in _editor:
             return min(max(lineno, self.data.firstline), self.data.lastline-self.cursor[1]-1)
 
         def UP(self, sub=1):
-            if self.cursor[1] + self.lnr - sub >= 0:
-                if self.cursor[1] - sub >= 0:
-                    self.cursor[1] -= sub
-                elif self.lnr - sub >= 0:
-                    self.lnr -= sub
+            sub = min(self.cursor[1] + self.lnr, sub)
+            part = min(self.cursor[1], sub)
+            self.cursor[1] -= part
+            self.lnr -= sub - part
 
         def DOWN(self, add=1):
-            if self.cursor[1] + self.lnr + add < self.data.lastline:
-                if self.cursor[1] + add < self.nolines:
-                    self.cursor[1] += add
-                else:
-                    self.lnr += add
+            add = min(add, self.data.lastline - self.cursor[1] - self.lnr - 1)
+            part = min(self.nolines - self.cursor[1] - 1, add)
+            self.cursor[1] += part
+            self.lnr += add - part
 
         def PAGEUP(self): self.UP(self.nolines)
         def PAGEDOWN(self): self.DOWN(self.nolines)
@@ -126,7 +124,7 @@ init -1500 python in _editor:
             self.parse()
             self.changed = True
             self.console.max = 0
-            self.handlekey("DOWN")
+            self.DOWN()
 
         def BACKSPACE(self):
 
