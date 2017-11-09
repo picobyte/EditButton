@@ -10,9 +10,7 @@ init -1500 python in _editor:
     import store
     import os
     import re
-    import shutil
 
-    from tempfile import mkstemp
     import math
 
     from pygments import highlight
@@ -20,17 +18,51 @@ init -1500 python in _editor:
     from renpyformatter import RenPyFormatter
     from pygments.styles import get_style_by_name
 
-    class TextData(object):
-        firstline = 0
+    class ReadOnlyData(object):
+        """ container and load interface for the read only data """
         def __init__(self, fname): self.load(fname)
-        @property
-        def lastline(self): return len(self.data)
+        def __getitem__(self, ndx): return self.data[ndx]
+        def __len__(self): return len(self.data)
 
-        def load(self, fname):
+        def load(self, fname=None):
+            if fname is not None:
+                self.fname = fname
             self.data = []
-            with open(os.path.join(renpy.config.basedir, fname)) as fh:
+            with open(self.fname) as fh:
                 for line in fh:
                     self.data.append(line.rstrip('\r\n'))
+
+    class ReadWriteData(ReadOnlyData):
+        """ to allow edit and saving """
+        def __init__(self, fname):
+            super(ReadWriteData, self).__init__(fname)
+            self.changes = []
+            self.start_change = 0
+
+        def __setitem__(self, ndx, value):
+            if value != self.data[ndx]:
+                self.changes.append(["__setitem__", ndx, self.data[ndx]])
+                self.data[ndx] = value
+
+        def save(self):
+            import shutil
+            from tempfile import mkstemp
+            if self.changes:
+                fh, abs_path = mkstemp()
+                for line in self.data:
+                    os.write(fh, line + os.linesep)
+                os.close(fh)
+                shutil.move(abs_path, self.fname)
+                self.start_change = len(self.changes)
+
+        def __delitem__(self, ndx):
+            self.changes.append(["insert", ndx, self.data[ndx]])
+            del(self.data[ndx])
+
+        def insert(self, ndx, value):
+            self.changes.append(["__delitem__", ndx]) # FIXME
+            self.data.insert(ndx, value)
+
 
     class rpio(object):
         def __init__(self): self.keymap = set()
@@ -40,10 +72,9 @@ init -1500 python in _editor:
 
     class TextView(rpio):
         wheel_scroll_lines = 3
-        def __init__(self, console, fname=None, nolines=None, lnr=None, lexer=None, format_style=None, wheel_scroll_lines=None):
+        def __init__(self, console, data, nolines=None, lnr=None, lexer=None, format_style=None, wheel_scroll_lines=None):
             super(TextView, self).__init__()
-            self.fname = os.path.join(renpy.config.basedir, fname)
-            self.data = TextData(self.fname)
+            self.data = data
             self.lnr = lnr if lnr else 0
             self.lineLenMax = 109
             self.lexer = lexer if lexer else RenPyLexer(stripnl=False)
@@ -57,15 +88,13 @@ init -1500 python in _editor:
             self.console = console
 
         @property
-        def data(self): return self.data.data
-        @property
         def line(self): return self.data[self.lnr+self.console.cy]
 
         @property
         def nolines(self):
             # for each in displaydata,
             nolines = 0
-            for i in xrange(self.lnr, min(self.lnr + self._nolines, self.data.lastline)):
+            for i in xrange(self.lnr, min(self.lnr + self._nolines, len(self.data))):
                 line_wraps = int(len(self.data[i])/self.lineLenMax) + 1
                 if nolines + line_wraps > self._nolines:
                     break
@@ -75,12 +104,12 @@ init -1500 python in _editor:
         def parse(self):
             self.colored_data = highlight(self.rpescape(os.linesep.join(self.data)), self.lexer, self.formater).split(os.linesep)
             renpy.parser.parse_errors = []
-            renpy.parser.parse(self.fname, os.linesep.join(self.data))
+            renpy.parser.parse(self.data.fname, os.linesep.join(self.data))
             if self.show_errors is not None:
                 self.show_errors = "\n{color=#f00}{size=-10}" + os.linesep.join(renpy.parser.parse_errors) +"{/size}{/color}" if renpy.parser.parse_errors else ""
 
         def gotoline(self, lineno):
-            return min(max(lineno, self.data.firstline), self.data.lastline-self.console.cy-1)
+            return min(max(lineno, 0), len(self.data)-self.console.cy-1)
 
         def UP(self, sub=1):
             sub = min(self.console.cy + self.lnr, sub)
@@ -89,7 +118,7 @@ init -1500 python in _editor:
             self.lnr -= sub - part
 
         def DOWN(self, add=1):
-            add = min(add, self.data.lastline - self.console.cy - self.lnr - 1)
+            add = min(add, len(self.data) - self.console.cy - self.lnr - 1)
             part = min(self.nolines - self.console.cy - 1, add)
             self.console.cy += part
             self.lnr += add - part
@@ -97,8 +126,8 @@ init -1500 python in _editor:
         def PAGEUP(self): self.UP(self.nolines)
         def PAGEDOWN(self): self.DOWN(self.nolines)
 
-        def ctrl_HOME(self): self.lnr = self.gotoline(self.data.firstline)
-        def ctrl_END(self): self.lnr = self.gotoline(self.data.lastline)
+        def ctrl_HOME(self): self.lnr = self.gotoline(0)
+        def ctrl_END(self): self.lnr = self.gotoline(len(self.data))
 
         def mousedown_4(self): self.UP(3)
         def mousedown_5(self): self.DOWN(3)
@@ -192,8 +221,8 @@ init -1500 python in _editor:
             return ('{color=#000000}' if at_start else '') + txt + ('{/color}' if at_end else '')
 
         def display(self):
-            ll = min(self.lnr + self.nolines, self.data.lastline)
-            return self.colorize(os.linesep.join(self.colored_data[self.lnr:ll]), self.lnr != 0, ll != self.data.lastline) + (self.show_errors if self.show_errors else "")
+            ll = min(self.lnr + self.nolines, len(self.data))
+            return self.colorize(os.linesep.join(self.colored_data[self.lnr:ll]), self.lnr != 0, ll != len(self.data)) + (self.show_errors if self.show_errors else "")
 
         def external_editor(self, ctxt, transient=1):
             renpy.exports.launch_editor([ctxt[0]], ctxt[1], transient=transient)
@@ -225,8 +254,8 @@ init -1500 python in _editor:
                 self.max = int(x * 113.3 / config.screen_width)
                 self.cy = int(y * 31.5 / config.screen_height)
 
-                if self.view.lnr + self.cy >= self.view.data.lastline:
-                    self.cy -= self.view.lnr + self.cy - self.view.data.lastline + 1
+                if self.view.lnr + self.cy >= len(self.view.data):
+                    self.cy -= self.view.lnr + self.cy - len(self.view.data) + 1
 
                 self.cx = min(self.max, len(self.view.data[self.view.lnr+self.cy]))
                 renpy.redraw(self, 0)
@@ -234,10 +263,10 @@ init -1500 python in _editor:
         def start(self, ctxt, offset=2):
             (fname, lnr) = ctxt
             lnr = lnr - 1 if fname else 0 # no fname indicates failure
-            self.fname = fname
+            self.fname = os.path.join(renpy.config.basedir, fname)
 
             if fname not in self.fl:
-                self.fl[fname] = EditView(console=self, fname=fname, lnr=lnr)
+                self.fl[fname] = EditView(console=self, data=ReadWriteData(self.fname), lnr=lnr)
             else:
                 self.view.lnr = lnr
                 self.view.handlekey("END") # NB. call via handlekey triggers cursor redraw.
@@ -252,7 +281,7 @@ init -1500 python in _editor:
             self.cx = self.cy = self.cx2 = self.cy2 = 0 # last two are meant for dragging
             if discard:
                 #reload from disk
-                self.view.data.load(self.view.fname)
+                self.view.data.load()
                 self.view.parse()
             elif apply:
                 self.view.save()
