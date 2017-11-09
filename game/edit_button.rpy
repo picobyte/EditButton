@@ -80,26 +80,23 @@ init -1500 python in _editor:
                 self._last_parsed_changes = len(self.changes)
             return (self.colored_buffer, renpy.parser.parse_errors)
 
-    class rpio(object):
-        def __init__(self): self.keymap = set()
-        def rpescape(self, string): return re.sub(r'(?<!\{)(\{(\{\{)*)(?!\{)', r'{\1', re.sub(r'(?<!\[)(\[(\[\[)*)(?!\[)', r'[\1', string))
-        def _list_keymap(self, km, n, mod): return [mod+'K_'+k for k in km] + ['repeat_'+mod+'K_'+k for k in km] + n
-        def repeat_keymap(self, km = [], n = [], mod=''): self.keymap.update(self._list_keymap(km, n, mod))
-
-    class TextView(rpio):
+    class TextView(object):
         wheel_scroll_lines = 3
         def __init__(self, console, data, nolines=None, lnr=None, wheel_scroll_lines=None):
-            super(TextView, self).__init__()
             self.data = data
             self.lnr = lnr if lnr else 0
             self.lineLenMax = 109
             self.show_errors = ""
+            self.keymap = set()
             self.parse()
             # XXX default nolines should be relative to window + font size
             self._nolines = nolines if nolines else int(config.screen_height / (34 + style.default.line_leading + style.default.line_spacing)) - 1
-            self.repeat_keymap(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['mousedown_4', 'mousedown_5'])
-            self.repeat_keymap(["HOME", "END"], mod="ctrl_")
+            self._repeat_keymap(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['mousedown_4', 'mousedown_5'])
+            self._repeat_keymap(["HOME", "END"], mod="ctrl_")
             self.console = console
+
+        def _list_keymap(self, km, n, mod): return [mod+'K_'+k for k in km] + ['repeat_'+mod+'K_'+k for k in km] + n
+        def _repeat_keymap(self, km = [], n = [], mod=''): self.keymap.update(self._list_keymap(km, n, mod))
 
         @property
         def line(self): return self.data[self.lnr+self.console.cy]
@@ -150,7 +147,7 @@ init -1500 python in _editor:
             super(EditView, self).__init__(**kwargs)
 
             #self.styleprefix = "editor"
-            self.repeat_keymap(["BACKSPACE", "DELETE", "RETURN", "LEFT", "RIGHT"], ["K_HOME", "K_END"])
+            self._repeat_keymap(["BACKSPACE", "DELETE", "RETURN", "LEFT", "RIGHT"], ["K_HOME", "K_END"])
             self.fontsize = 34
             self.handlekey("END")
             self.nrSymbol = ")!@#$%^&*("
