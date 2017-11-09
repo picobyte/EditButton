@@ -23,11 +23,11 @@ init -1500 python in _editor:
     class TextData(object):
         firstline = 0
         def __init__(self, fname):
-            self.deserialize(fname)
+            self.load(fname)
         @property
         def lastline(self): return len(self.buffer)
 
-        def deserialize(self, fname):
+        def load(self, fname):
             self.buffer = []
             with open(os.path.join(renpy.config.basedir, fname)) as fh:
                 for line in fh:
@@ -180,7 +180,7 @@ init -1500 python in _editor:
             self.console.cx = min(self.console.max, len(self.line))
             renpy.redraw(self.console, 0)
 
-        def serialize(self):
+        def save(self):
             if self.changed:
                 fh, abs_path = mkstemp()
                 for line in self.buffer:
@@ -253,10 +253,10 @@ init -1500 python in _editor:
             self.cx = self.cy = self.cx2 = self.cy2 = 0 # last two are meant for dragging
             if discard:
                 #reload from disk
-                self.view.data.deserialize(self.view.fname)
+                self.view.data.load(self.view.fname)
                 self.view.parse()
             elif apply:
-                self.view.serialize()
+                self.view.save()
 
     editor = Editor()
 
