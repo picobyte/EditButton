@@ -22,16 +22,15 @@ init -1500 python in _editor:
 
     class TextData(object):
         firstline = 0
-        def __init__(self, fname):
-            self.load(fname)
+        def __init__(self, fname): self.load(fname)
         @property
-        def lastline(self): return len(self.buffer)
+        def lastline(self): return len(self.data)
 
         def load(self, fname):
-            self.buffer = []
+            self.data = []
             with open(os.path.join(renpy.config.basedir, fname)) as fh:
                 for line in fh:
-                    self.buffer.append(line.rstrip('\r\n'))
+                    self.data.append(line.rstrip('\r\n'))
 
     class rpio(object):
         def __init__(self): self.keymap = set()
@@ -58,25 +57,25 @@ init -1500 python in _editor:
             self.console = console
 
         @property
-        def buffer(self): return self.data.buffer
+        def data(self): return self.data.data
         @property
-        def line(self): return self.buffer[self.lnr+self.console.cy]
+        def line(self): return self.data[self.lnr+self.console.cy]
 
         @property
         def nolines(self):
-            # for each in displaybuffer,
+            # for each in displaydata,
             nolines = 0
             for i in xrange(self.lnr, min(self.lnr + self._nolines, self.data.lastline)):
-                line_wraps = int(len(self.buffer[i])/self.lineLenMax) + 1
+                line_wraps = int(len(self.data[i])/self.lineLenMax) + 1
                 if nolines + line_wraps > self._nolines:
                     break
                 nolines += line_wraps
             return nolines
 
         def parse(self):
-            self.colored_buffer = highlight(self.rpescape(os.linesep.join(self.buffer)), self.lexer, self.formater).split(os.linesep)
+            self.colored_data = highlight(self.rpescape(os.linesep.join(self.data)), self.lexer, self.formater).split(os.linesep)
             renpy.parser.parse_errors = []
-            renpy.parser.parse(self.fname, os.linesep.join(self.buffer))
+            renpy.parser.parse(self.fname, os.linesep.join(self.data))
             if self.show_errors is not None:
                 self.show_errors = "\n{color=#f00}{size=-10}" + os.linesep.join(renpy.parser.parse_errors) +"{/size}{/color}" if renpy.parser.parse_errors else ""
 
@@ -128,8 +127,8 @@ init -1500 python in _editor:
 
         def RETURN(self):
             y = self.lnr+self.console.cy
-            self.buffer.insert(y+1, self.buffer[y][self.console.cx:])
-            self.buffer[y] = self.buffer[y][:self.console.cx]
+            self.data.insert(y+1, self.data[y][self.console.cx:])
+            self.data[y] = self.data[y][:self.console.cx]
             self.parse()
             self.changed = True
             self.console.max = 0
@@ -142,9 +141,9 @@ init -1500 python in _editor:
             self.changed = True
             if self.console.cx == 0:
                 if self.lnr + self.console.cy != 0: #FIXME
-                    self.console.max = len(self.buffer[y - 1])
-                    self.buffer[y - 1] += self.buffer[y]
-                    del self.buffer[y]
+                    self.console.max = len(self.data[y - 1])
+                    self.data[y - 1] += self.data[y]
+                    del self.data[y]
                     self.UP()
             else:
                 self.LEFT()
@@ -155,20 +154,20 @@ init -1500 python in _editor:
         def DELETE(self):
             x = self.console.cx
             y = self.lnr+self.console.cy
-            buf = self.buffer[y]
+            buf = self.data[y]
             self.changed = True
             if x != len(self.line):
-                self.buffer[y] = buf[:x] + buf[x+1:]
+                self.data[y] = buf[:x] + buf[x+1:]
             elif y != self.nolines:
                 self.console.max = len(buf)
-                self.buffer[y] += self.buffer[y+1]
-                del self.buffer[y+1]
+                self.data[y] += self.data[y+1]
+                del self.data[y+1]
             self.parse()
 
         def insert(self, s):
             x = self.console.cx
-            buf = self.buffer[self.lnr+self.console.cy]
-            self.buffer[self.lnr+self.console.cy] = buf[:x] + s + buf[x:]
+            buf = self.data[self.lnr+self.console.cy]
+            self.data[self.lnr+self.console.cy] = buf[:x] + s + buf[x:]
             self.console.max += len(s)
             self.console.cx = min(self.console.max, len(self.line))
             renpy.redraw(self.console, 0)
@@ -183,7 +182,7 @@ init -1500 python in _editor:
         def save(self):
             if self.changed:
                 fh, abs_path = mkstemp()
-                for line in self.buffer:
+                for line in self.data:
                     os.write(fh, line + os.linesep)
                 os.close(fh)
                 shutil.move(abs_path, self.fname)
@@ -194,7 +193,7 @@ init -1500 python in _editor:
 
         def display(self):
             ll = min(self.lnr + self.nolines, self.data.lastline)
-            return self.colorize(os.linesep.join(self.colored_buffer[self.lnr:ll]), self.lnr != 0, ll != self.data.lastline) + (self.show_errors if self.show_errors else "")
+            return self.colorize(os.linesep.join(self.colored_data[self.lnr:ll]), self.lnr != 0, ll != self.data.lastline) + (self.show_errors if self.show_errors else "")
 
         def external_editor(self, ctxt, transient=1):
             renpy.exports.launch_editor([ctxt[0]], ctxt[1], transient=transient)
@@ -229,7 +228,7 @@ init -1500 python in _editor:
                 if self.view.lnr + self.cy >= self.view.data.lastline:
                     self.cy -= self.view.lnr + self.cy - self.view.data.lastline + 1
 
-                self.cx = min(self.max, len(self.view.buffer[self.view.lnr+self.cy]))
+                self.cx = min(self.max, len(self.view.data[self.view.lnr+self.cy]))
                 renpy.redraw(self, 0)
 
         def start(self, ctxt, offset=2):
