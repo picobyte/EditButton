@@ -33,7 +33,7 @@ init -1500 python in _editor:
                     self.data.append(line.rstrip('\r\n'))
 
     class ReadWriteData(ReadOnlyData):
-        """ to allow edit and saving """
+        """ allows edit and save """
         def __init__(self, fname):
             super(ReadWriteData, self).__init__(fname)
             self.changes = []
@@ -60,9 +60,25 @@ init -1500 python in _editor:
             del(self.data[ndx])
 
         def insert(self, ndx, value):
-            self.changes.append(["__delitem__", ndx]) # FIXME
+            self.changes.append(["__delitem__", ndx])
             self.data.insert(ndx, value)
 
+    class RenPyData(ReadWriteData):
+        def __init__(self, fname, format_style=None):
+            super(RenPyData, self).__init__(fname)
+            self.lexer = RenPyLexer(stripnl=False)
+            self.formater = RenPyFormatter(style=format_style if format_style else 'monokai')
+            self._last_parsed_changes = None
+
+        def parse(self):
+            if len(self.changes) != self._last_parsed_changes:
+                document = os.linesep.join(self.data)
+                renpy.parser.parse_errors = []
+                renpy.parser.parse(self.fname, document)
+                escaped = re.sub(r'(?<!\{)(\{(\{\{)*)(?!\{)', r'{\1', re.sub(r'(?<!\[)(\[(\[\[)*)(?!\[)', r'[\1', document))
+                self.colored_buffer = highlight(escaped, self.lexer, self.formater).split(os.linesep)
+                self._last_parsed_changes = len(self.changes)
+            return (self.colored_buffer, renpy.parser.parse_errors)
 
     class rpio(object):
         def __init__(self): self.keymap = set()
@@ -72,13 +88,11 @@ init -1500 python in _editor:
 
     class TextView(rpio):
         wheel_scroll_lines = 3
-        def __init__(self, console, data, nolines=None, lnr=None, lexer=None, format_style=None, wheel_scroll_lines=None):
+        def __init__(self, console, data, nolines=None, lnr=None, wheel_scroll_lines=None):
             super(TextView, self).__init__()
             self.data = data
             self.lnr = lnr if lnr else 0
             self.lineLenMax = 109
-            self.lexer = lexer if lexer else RenPyLexer(stripnl=False)
-            self.formater = RenPyFormatter(style=format_style if format_style else 'monokai')
             self.show_errors = ""
             self.parse()
             # XXX default nolines should be relative to window + font size
@@ -102,11 +116,9 @@ init -1500 python in _editor:
             return nolines
 
         def parse(self):
-            self.colored_data = highlight(self.rpescape(os.linesep.join(self.data)), self.lexer, self.formater).split(os.linesep)
-            renpy.parser.parse_errors = []
-            renpy.parser.parse(self.data.fname, os.linesep.join(self.data))
+            (self.colored_data, err) = self.data.parse()
             if self.show_errors is not None:
-                self.show_errors = "\n{color=#f00}{size=-10}" + os.linesep.join(renpy.parser.parse_errors) +"{/size}{/color}" if renpy.parser.parse_errors else ""
+                self.show_errors = "\n{color=#f00}{size=-10}" + os.linesep.join(err) +"{/size}{/color}" if err else ""
 
         def gotoline(self, lineno):
             return min(max(lineno, 0), len(self.data)-self.console.cy-1)
@@ -266,7 +278,7 @@ init -1500 python in _editor:
             self.fname = os.path.join(renpy.config.basedir, fname)
 
             if fname not in self.fl:
-                self.fl[fname] = EditView(console=self, data=ReadWriteData(self.fname), lnr=lnr)
+                self.fl[fname] = EditView(console=self, data=RenPyData(self.fname), lnr=lnr)
             else:
                 self.view.lnr = lnr
                 self.view.handlekey("END") # NB. call via handlekey triggers cursor redraw.
