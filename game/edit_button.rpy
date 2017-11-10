@@ -18,6 +18,34 @@ init -1500 python in _editor:
     from renpyformatter import RenPyFormatter
     from pygments.styles import get_style_by_name
 
+    class History(object):
+        def __init__(self): self.reset()
+        def reset(self):
+            self._undo = []
+            self.mode = 0
+            self.at = 0
+        def append(self, what):
+            if self.mode == 0:
+                if self.at < len(self._undo):
+                    self._undo = self._undo[:self.at]
+                self._undo.append(what)
+                self.at += 1
+            elif self.mode == 1:
+                self.at -= 1
+                self._undo[self.at] = what
+                self.mode = 0
+            else:
+                self._undo[self.at] = what
+                self.at += 1
+                self.mode = 0
+        def undo(self):
+            if self.at > 0 and self.at <= len(self._undo):
+                self.mode = 1
+                return self._undo[self.at-1]
+        def redo(self):
+            self.mode = 2
+            return self._undo[self.at]
+
     class ReadOnlyData(object):
         """ container and load interface for the read only data """
         def __init__(self, fname): self.load(fname)
@@ -36,32 +64,48 @@ init -1500 python in _editor:
         """ allows edit and save """
         def __init__(self, fname):
             super(ReadWriteData, self).__init__(fname)
-            self.changes = []
+            self.history = History()
             self.start_change = 0
 
         def __setitem__(self, ndx, value):
             if value != self.data[ndx]:
-                self.changes.append(["__setitem__", ndx, self.data[ndx]])
+                self.history.append(["__setitem__", ndx, self.data[ndx]])
                 self.data[ndx] = value
+
+        def load(self, fname=None):
+            super(ReadWriteData, self).load(fname)
+            self.history = History()
 
         def save(self):
             import shutil
             from tempfile import mkstemp
-            if self.changes:
+            if len(self.history) > self.start_change: # any changes?
                 fh, abs_path = mkstemp()
                 for line in self.data:
                     os.write(fh, line + os.linesep)
                 os.close(fh)
                 shutil.move(abs_path, self.fname)
-                self.start_change = len(self.changes)
+                self.start_change = len(self.history)
 
         def __delitem__(self, ndx):
-            self.changes.append(["insert", ndx, self.data[ndx]])
+            self.history.append(["insert", ndx, self.data[ndx]])
             del(self.data[ndx])
 
         def insert(self, ndx, value):
-            self.changes.append(["__delitem__", ndx])
+            self.history.append(["__delitem__", ndx])
             self.data.insert(ndx, value)
+
+        def undo(self):
+            if self.history.at >= 0:
+                act = self.history.undo()
+                if act is not None:
+                    getattr(self, act[0])(*act[1:])
+
+        def redo(self):
+            if self.history.at < len(self.history._undo):
+                act = self.history.redo()
+                if act is not None:
+                    getattr(self, act[0])(*act[1:])
 
     class RenPyData(ReadWriteData):
         def __init__(self, fname, format_style=None):
@@ -71,16 +115,17 @@ init -1500 python in _editor:
             self._last_parsed_changes = None
 
         def parse(self):
-            if len(self.changes) != self._last_parsed_changes:
+            if self.history.at != self._last_parsed_changes:
                 document = os.linesep.join(self.data)
                 renpy.parser.parse_errors = []
                 renpy.parser.parse(self.fname, document)
                 escaped = re.sub(r'(?<!\{)(\{(\{\{)*)(?!\{)', r'{\1', re.sub(r'(?<!\[)(\[(\[\[)*)(?!\[)', r'[\1', document))
                 self.colored_buffer = highlight(escaped, self.lexer, self.formater).split(os.linesep)
-                self._last_parsed_changes = len(self.changes)
+                self._last_parsed_changes = self.history.at
             return (self.colored_buffer, renpy.parser.parse_errors)
 
     class TextView(object):
+        """keeps track of horizontal position in text. Wrapping is not taken into account"""
         wheel_scroll_lines = 3
         def __init__(self, console, data, nolines=None, lnr=None, wheel_scroll_lines=None):
             self.data = data
@@ -138,8 +183,8 @@ init -1500 python in _editor:
         def ctrl_HOME(self): self.lnr = self.gotoline(0)
         def ctrl_END(self): self.lnr = self.gotoline(len(self.data))
 
-        def mousedown_4(self): self.UP(3)
-        def mousedown_5(self): self.DOWN(3)
+        def mousedown_4(self): self.UP(self.wheel_scroll_lines)
+        def mousedown_5(self): self.DOWN(self.wheel_scroll_lines)
 
     class EditView(TextView):
 
@@ -236,6 +281,14 @@ init -1500 python in _editor:
         def external_editor(self, ctxt, transient=1):
             renpy.exports.launch_editor([ctxt[0]], ctxt[1], transient=transient)
 
+        def ctrl_z(self):
+            self.data.undo()
+            self.parse()
+
+        def ctrl_y(self):
+            self.data.redo()
+            self.parse()
+
     class Editor(renpy.Displayable):
         def __init__(self, *a, **b):
             super(Editor, self).__init__(a, b)
@@ -322,6 +375,10 @@ screen editor:
 
         key "shift_K_RETURN" action [Function(editor.exit, apply = True), Return()]
         key "shift_K_KP_ENTER" action [Function(editor.exit, apply = True), Return()]
+
+        for keystr in 'zy':
+            key 'ctrl_K_'+keystr action Function(view.handlekey, 'ctrl_K_'+keystr)
+            key 'repeat_ctrl_K_'+keystr action Function(view.handlekey, 'repeat_ctrl_K_'+keystr)
 
         key "K_ESCAPE" action [Function(editor.exit), Return()]
 
