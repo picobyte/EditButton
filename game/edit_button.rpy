@@ -133,16 +133,15 @@ init -1500 python in _editor:
             self.lnr = lnr if lnr else 0
             self.lineLenMax = 109
             self.show_errors = ""
-            self.keymap = set()
+            self.keymap = set(['mousedown_4', 'mousedown_5'])
             self.parse()
             # XXX default nolines should be relative to window + font size
             self._nolines = nolines if nolines else int(config.screen_height / (34 + style.default.line_leading + style.default.line_spacing)) - 1
-            self._repeat_keymap(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['mousedown_4', 'mousedown_5'])
-            self._repeat_keymap(["HOME", "END"], mod="ctrl_")
+            self._add_km(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['repeat_', ''])
+            self._add_km(['HOME', 'END'], ['ctrl_'])
             self.console = console
 
-        def _list_keymap(self, km, n, mod): return [mod+'K_'+k for k in km] + ['repeat_'+mod+'K_'+k for k in km] + n
-        def _repeat_keymap(self, km = [], n = [], mod=''): self.keymap.update(self._list_keymap(km, n, mod))
+        def _add_km(self, km, mod): self.keymap.update([m+'K_'+k for k in km for m in mod])
 
         @property
         def line(self): return self.data[self.lnr+self.console.cy]
@@ -181,8 +180,10 @@ init -1500 python in _editor:
         def PAGEUP(self): self.UP(self.nolines)
         def PAGEDOWN(self): self.DOWN(self.nolines)
 
-        def ctrl_HOME(self): self.lnr = self.gotoline(0)
-        def ctrl_END(self): self.lnr = self.gotoline(len(self.data))
+        def ctrl_HOME(self): self.console.cy = self.lnr = 0
+        def ctrl_END(self):
+            self.console.cy = self.nolines - 1
+            self.lnr = len(self.data) - self.console.cy - 1
 
         def mousedown_4(self): self.UP(self.wheel_scroll_lines)
         def mousedown_5(self): self.DOWN(self.wheel_scroll_lines)
@@ -193,12 +194,14 @@ init -1500 python in _editor:
             super(EditView, self).__init__(**kwargs)
 
             #self.styleprefix = "editor"
-            self._repeat_keymap(["BACKSPACE", "DELETE", "RETURN", "LEFT", "RIGHT"], ["K_HOME", "K_END"])
+            self._add_km(['BACKSPACE', 'DELETE', 'RETURN'], ['repeat_', ''])
+            self._add_km(['HOME', 'END'], ['shift_', ''])
+            self._add_km(['LEFT', 'RIGHT'], ['shift_', 'ctrl_', 'ctrl_shift_', 'repeat_ctrl_shift_','', 'repeat_shift_', 'repeat_ctrl_', 'repeat_'])
             self.fontsize = 34
             self.handlekey("END")
             self.nrSymbol = ")!@#$%^&*("
             self.oSymName = [ "BACKQUOTE", "MINUS", "EQUALS", "LEFTBRACKET", "RIGHTBRACKET",
-                                "BACKSLASH", "SEMICOLON", "QUOTE", "COMMA", "PERIOD", "SLASH"]
+                               "BACKSLASH", "SEMICOLON", "QUOTE", "COMMA", "PERIOD", "SLASH"]
             self.oSymLow = r"`-=[]\;',./"
             self.oSymUpp = r'~_+{}|:"<>?'
             self.changed = False
@@ -207,8 +210,20 @@ init -1500 python in _editor:
         def LEFT(self, sub=1): self.console.max = max(self.console.cx - sub, 0)
         def RIGHT(self, add=1): self.console.max = min(self.console.cx + add, len(self.line))
 
+        def ctrl_LEFT(self):
+            y = self.lnr+self.console.cy
+            m = re.compile(r'\w*\W*$').search(self.data[y][:self.console.cx])
+            if m:
+                self.LEFT(len(m.group(0)))
+
+        def ctrl_RIGHT(self):
+            y = self.lnr+self.console.cy
+            m = re.compile(r'^\w*\W*').match(self.data[y][self.console.cx:])
+            if m:
+                self.RIGHT(len(m.group(0)))
+
         def HOME(self): self.console.max = 0
-        def END(self): self.console.max = 0xffff # FIXME: what to do with very long lines?
+        def END(self): self.console.max = 0xffff
 
         def RETURN(self):
             y = self.lnr+self.console.cy
@@ -220,55 +235,57 @@ init -1500 python in _editor:
             self.DOWN()
 
         def BACKSPACE(self):
+            cons = self.console
 
-            y = self.lnr+self.console.cy
+            y = self.lnr+cons.cy
 
             self.changed = True
-            if self.console.cx or self.console.cw:
+            if cons.cx or cons.cx != cons.CX:
                 self.LEFT()
-                self.console.cx = min(self.console.max, len(self.line))
+                cons.cx = min(cons.max, len(self.line))
                 self.DELETE()
-                if self.console.cw:
-                    self.console.max += self.console.cw
+                if cons.cx != cons.CX:
+                    cons.max += cons.CX
             else:
-                if self.lnr + self.console.cy != 0: #FIXME
-                    self.console.max = len(self.data[y - 1])
+                if self.lnr + cons.cy != 0: #FIXME
+                    cons.max = len(self.data[y - 1])
                     self.data[y - 1] += self.data[y]
                     del self.data[y]
                     self.UP()
             self.parse()
 
         def DELETE(self):
-            x = self.console.cx
-            y = self.lnr+self.console.cy
-            ct = 1 if self.console.cw == 0 else self.console.cw
+            cons = self.console
+            s, e = (cons.cx, cons.CX) if cons.cx < cons.CX else (cons.CX, cons.cx)
+            y = self.lnr+cons.cy
+            ct = 1 if cons.CX == 0 else cons.CX
             buf = self.data[y]
             self.changed = True
-            if x != len(self.line) or self.console.cw:
-                self.data[y] = buf[:x] + buf[x+ct:]
-                if self.console.cw:
-                    self.console.max -= ct
+            if s != e or e != len(self.line):
+                self.data[y] = buf[:s] + buf[e:]
+                cons.max = cons.CX = s
             elif y != self.nolines:
-                self.console.max = len(buf)
+                cons.max = len(buf)
                 self.data[y] += self.data[y+1]
                 del self.data[y+1]
             self.parse()
 
         def copy(self):
             import pyperclip
-            x = self.console.cx
-            pyperclip.copy(self.data[self.lnr+self.console.cy][x:x+self.console.cw])
+            cons = self.console
+            s, e = (cons.cx, cons.CX) if cons.cx < cons.CX else (cons.CX, cons.cx)
+            pyperclip.copy(self.data[self.lnr+self.console.cy][s:e])
 
         def cut(self):
             self.copy()
-            if self.console.cw:
+            if self.console.CX:
                 self.handlekey("DELETE")
 
         def insert(self, s=None):
             import pyperclip
             if s == None:
                 s = pyperclip.paste()
-            if self.console.cw:
+            if self.console.CX:
                 self.handlekey("DELETE")
             x = self.console.cx
             buf = self.data[self.lnr+self.console.cy]
@@ -280,9 +297,10 @@ init -1500 python in _editor:
             self.parse()
 
         def handlekey(self, keystr):
-            getattr(self, re.sub(r'^(?:repeat_)?(ctrl_|meta_|alt_|)K_', r'\1', keystr))()
+            getattr(self, re.sub(r'^(?:repeat_)?(ctrl_|meta_|alt_|)(?:shift_)?K_', r'\1', keystr))()
             self.console.cx = min(self.console.max, len(self.line))
-            self.console.cw = 0
+            if "shift_" not in keystr:
+                self.console.CX, self.console.CY = self.console.cx, self.console.cy
             renpy.redraw(self.console, 0)
 
         def colorize(self, txt, at_start=False, at_end=False):
@@ -306,16 +324,11 @@ init -1500 python in _editor:
     class Editor(renpy.Displayable):
         def __init__(self, *a, **b):
             super(Editor, self).__init__(a, b)
-            self.max = 0xffff
             self.fl = {}
             self.fname = None
             self.view = None
-            self.cx = 0
-            self.cy = 0
-            self.cw = 0
-            self.ch = 0
             self.is_mouse_pressed = False
-            self.exit() # sets tis_visible and cursor coords to default
+            self.exit() # sets is_visible and cursor coords to default
 
         def render(self, width, height, st, at):
             R = renpy.Render(width, height)
@@ -323,12 +336,11 @@ init -1500 python in _editor:
             dx = width / 110
             dy = height / 31
             color = (255,255,255,255)
-            if self.ch == 0:
-                if self.cw == 0:
-                    C.line(color,(self.cx*dx,self.cy*dy),(self.cx*dx,(self.cy+0.95)*dy))
-                else:
-                    C.rect(color,(self.cx*dx, self.cy*dy, self.cw*dx, 0.95*dy))
-            else:
+            if self.CX == self.cx:
+                C.line(color,(self.cx*dx,self.cy*dy),(self.cx*dx, (self.cy+0.95)*dy))
+            elif self.cy == self.CY:
+                C.rect(color,(self.cx*dx, self.cy*dy, (self.CX-self.cx)*dx, 0.95*dy))
+            elif self.cy != self.CY:
                 renpy.error("Multi line selection not yet implemented")
             return R
 
@@ -348,16 +360,13 @@ init -1500 python in _editor:
         def event(self, ev, x, y, st):
             import pygame
             if ev.type == pygame.MOUSEBUTTONDOWN:
-                (self.cx, self.cy) = self._getcycx(x, y)
-                self.cw = 0
+                self.cx, self.cy = self._getcycx(x, y)
+                self.CX, self.CY = self.cx, self.cy
                 renpy.redraw(self, 0)
                 self.is_mouse_pressed = True
             if self.is_mouse_pressed and ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP:
-                (x, y) = self._getcycx(x, y)
-                if (y == self.cy):
-                    if x < self.cx and ev.type == pygame.MOUSEBUTTONUP:
-                        x, self.cx = self.cx, x
-                    self.cw = x - self.cx
+                self.CX, self.CY = self._getcycx(x, y)
+                self.CY = self.cy # TODO: allow multiple lines (and remove)
                 renpy.redraw(self, 0)
                 if ev.type == pygame.MOUSEBUTTONUP:
                     self.is_mouse_pressed = False
@@ -381,7 +390,7 @@ init -1500 python in _editor:
             Applied changes are not visible until reload (shift+R).
             """
             self.is_visible = False
-            self.cx = self.cy = self.cx2 = self.cy2 = 0 # last two are meant for dragging
+            self.max = self.cx = self.cy = self.CX = self.CY = 0 # last two are meant for dragging
             if discard:
                 #reload from disk
                 self.view.data.load()
@@ -411,7 +420,7 @@ screen editor:
         add editor
         text editor.view.display() style "editor"
 
-        for keystr in view.keymap:
+        for keystr in sorted(view.keymap, key=len):
             key keystr action Function(view.handlekey, keystr)
 
         key "shift_K_RETURN" action [Function(editor.exit, apply = True), Return()]
