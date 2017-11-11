@@ -202,6 +202,7 @@ init -1500 python in _editor:
             self.oSymLow = r"`-=[]\;',./"
             self.oSymUpp = r'~_+{}|:"<>?'
             self.changed = False
+            self.copied = ""
 
         def LEFT(self, sub=1): self.console.max = max(self.console.cx - sub, 0)
         def RIGHT(self, add=1): self.console.max = min(self.console.cx + add, len(self.line))
@@ -252,6 +253,20 @@ init -1500 python in _editor:
                 self.data[y] += self.data[y+1]
                 del self.data[y+1]
             self.parse()
+
+        def copy(self):
+            x = self.console.cx
+            self.copied = self.data[self.lnr+self.console.cy][x:x+self.console.cw]
+
+        def cut(self):
+            self.copy()
+            if self.console.cw:
+                self.handlekey("DELETE")
+
+        def paste(self):
+            if self.console.cw:
+                self.handlekey("DELETE")
+            self.insert(self.copied)
 
         def insert(self, s):
             x = self.console.cx
@@ -406,6 +421,10 @@ screen editor:
             key 'repeat_ctrl_K_'+keystr action Function(view.handlekey, 'repeat_ctrl_K_'+keystr)
 
         key "K_ESCAPE" action [Function(editor.exit), Return()]
+
+        key "ctrl_K_c" action Function(editor.view.copy)
+        key "ctrl_K_x" action Function(editor.view.cut)
+        key "ctrl_K_v" action Function(editor.view.paste)
 
         key "K_TAB" action Function(view.insert, "    ")
         key "K_SPACE" action Function(view.insert, " ")
