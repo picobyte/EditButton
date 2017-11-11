@@ -258,13 +258,14 @@ init -1500 python in _editor:
             cons = self.console
             s, e = (cons.cx, cons.CX) if cons.cx < cons.CX else (cons.CX, cons.cx)
             y = self.lnr+cons.cy
-            ct = 1 if cons.CX == 0 else cons.CX
             buf = self.data[y]
             self.changed = True
-            if s != e or e != len(self.line):
+            if s != len(self.line):
+                if e == s:
+                    e += 1
                 self.data[y] = buf[:s] + buf[e:]
                 cons.max = cons.CX = s
-            elif y != self.nolines:
+            elif y < self.nolines - 1:
                 cons.max = len(buf)
                 self.data[y] += self.data[y+1]
                 del self.data[y+1]
@@ -278,20 +279,19 @@ init -1500 python in _editor:
 
         def cut(self):
             self.copy()
-            if self.console.CX:
+            if self.console.CX != self.console.cx:
                 self.handlekey("DELETE")
 
         def insert(self, s=None):
             import pyperclip
             if s == None:
                 s = pyperclip.paste()
-            if self.console.CX:
+            if self.console.CX != self.console.cx:
                 self.handlekey("DELETE")
-            x = self.console.cx
             buf = self.data[self.lnr+self.console.cy]
-            self.data[self.lnr+self.console.cy] = buf[:x] + s + buf[x:]
+            self.data[self.lnr+self.console.cy] = buf[:self.console.cx] + s + buf[self.console.cx:]
             self.console.max += len(s)
-            self.console.cx = min(self.console.max, len(self.line))
+            self.console.CX = self.console.cx = min(self.console.max, len(self.line))
             renpy.redraw(self.console, 0)
             self.changed = True
             self.parse()
