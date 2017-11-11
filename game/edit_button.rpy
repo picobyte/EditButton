@@ -255,15 +255,19 @@ init -1500 python in _editor:
             self.parse()
 
         def copy(self):
+            import pyperclip
             x = self.console.cx
-            self.copied = self.data[self.lnr+self.console.cy][x:x+self.console.cw]
+            pyperclip.copy(self.data[self.lnr+self.console.cy][x:x+self.console.cw])
 
         def cut(self):
             self.copy()
             if self.console.cw:
                 self.handlekey("DELETE")
 
-        def insert(self, s):
+        def insert(self, s=None):
+            import pyperclip
+            if s == None:
+                s = pyperclip.paste()
             if self.console.cw:
                 self.handlekey("DELETE")
             x = self.console.cx
@@ -421,7 +425,7 @@ screen editor:
 
         key "ctrl_K_c" action Function(editor.view.copy)
         key "ctrl_K_x" action Function(editor.view.cut)
-        key "ctrl_K_v" action Function(editor.view.insert, editor.view.copied)
+        key "ctrl_K_v" action Function(editor.view.insert)
 
         key "K_TAB" action Function(view.insert, "    ")
         key "K_SPACE" action Function(view.insert, " ")
