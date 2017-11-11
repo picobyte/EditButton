@@ -10,6 +10,7 @@ init -1500 python in _editor:
     import store
     import os
     import re
+    import codecs
 
     import math
 
@@ -49,16 +50,19 @@ init -1500 python in _editor:
     class ReadOnlyData(object):
         """ container and load interface for the read only data """
         def __init__(self, fname): self.load(fname)
-        def __getitem__(self, ndx): return self.data[ndx]
+        def __getitem__(self, ndx):
+            if ndx >= len(self.data):
+                renpy.error((self.fname, ndx))
+            return self.data[ndx]
         def __len__(self): return len(self.data)
 
         def load(self, fname=None):
             if fname is not None:
                 self.fname = fname
             self.data = []
-            with open(self.fname) as fh:
-                for line in fh:
-                    self.data.append(line.rstrip('\r\n'))
+            fh = codecs.open(self.fname, encoding='utf-8')
+            for line in fh:
+                self.data.append(line.rstrip(u"\r\n"))
 
     class ReadWriteData(ReadOnlyData):
         """ allows edit and save """
