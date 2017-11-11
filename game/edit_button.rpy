@@ -50,10 +50,7 @@ init -1500 python in _editor:
     class ReadOnlyData(object):
         """ container and load interface for the read only data """
         def __init__(self, fname): self.load(fname)
-        def __getitem__(self, ndx):
-            if ndx >= len(self.data):
-                renpy.error((self.fname, ndx))
-            return self.data[ndx]
+        def __getitem__(self, ndx): return self.data[ndx]
         def __len__(self): return len(self.data)
 
         def load(self, fname=None):
@@ -264,6 +261,7 @@ init -1500 python in _editor:
         def handlekey(self, keystr):
             getattr(self, re.sub(r'^(?:repeat_)?(ctrl_|meta_|alt_|)K_', r'\1', keystr))()
             self.console.cx = min(self.console.max, len(self.line))
+            self.console.cw = 0
             renpy.redraw(self.console, 0)
 
         def colorize(self, txt, at_start=False, at_end=False):
@@ -291,6 +289,11 @@ init -1500 python in _editor:
             self.fl = {}
             self.fname = None
             self.view = None
+            self.cx = 0
+            self.cy = 0
+            self.cw = 0
+            self.ch = 0
+            self.is_mouse_pressed = False
             self.exit() # sets tis_visible and cursor coords to default
 
         def render(self, width, height, st, at):
@@ -298,37 +301,59 @@ init -1500 python in _editor:
             C = R.canvas()
             dx = width / 110
             dy = height / 31
-            C.line((255,255,255,255),(self.cx*dx,self.cy*dy),(self.cx*dx,(self.cy+0.95)*dy))
+            color = (255,255,255,255)
+            if self.ch == 0:
+                if self.cw == 0:
+                    C.line(color,(self.cx*dx,self.cy*dy),(self.cx*dx,(self.cy+0.95)*dy))
+                else:
+                    C.rect(color,(self.cx*dx, self.cy*dy, self.cw*dx, 0.95*dy))
+            else:
+                renpy.error("Multi line selection not yet implemented")
             return R
 
         def debug(self, do_show=False):
             self.view.show_errors = "" if do_show else None
             self.view.parse()
 
+        def _getcycx(self, x, y):
+            self.max = int(x * 113.3 / config.screen_width)
+            cy = int(y * 31.5 / config.screen_height)
+
+            if self.view.lnr + cy >= len(self.view.data):
+                cy -= self.view.lnr + cy - len(self.view.data) + 1
+
+            return (min(self.max, len(self.view.data[self.view.lnr+cy])), cy)
+
         def event(self, ev, x, y, st):
             import pygame
             if ev.type == pygame.MOUSEBUTTONDOWN:
-                self.max = int(x * 113.3 / config.screen_width)
-                self.cy = int(y * 31.5 / config.screen_height)
-
-                if self.view.lnr + self.cy >= len(self.view.data):
-                    self.cy -= self.view.lnr + self.cy - len(self.view.data) + 1
-
-                self.cx = min(self.max, len(self.view.data[self.view.lnr+self.cy]))
+                (self.cx, self.cy) = self._getcycx(x, y)
+                self.cw = 0
                 renpy.redraw(self, 0)
+                self.is_mouse_pressed = True
+            if self.is_mouse_pressed and ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP:
+                (x, y) = self._getcycx(x, y)
+                if (y == self.cy):
+                    if x < self.cx and ev.type == pygame.MOUSEBUTTONUP:
+                        x, self.cx = self.cx, x
+                    self.cw = x - self.cx
+                renpy.redraw(self, 0)
+                if ev.type == pygame.MOUSEBUTTONUP:
+                    self.is_mouse_pressed = False
 
         def start(self, ctxt, offset=2):
             (fname, lnr) = ctxt
-            lnr = lnr - 1 if fname else 0 # no fname indicates failure
-            self.fname = os.path.join(renpy.config.basedir, fname)
+            if fname: # no fname indicates failure
+                lnr = lnr - 1
+                self.fname = os.path.join(renpy.config.basedir, fname)
 
-            if fname not in self.fl:
-                self.fl[fname] = EditView(console=self, data=RenPyData(self.fname), lnr=lnr)
-            else:
-                self.view.lnr = lnr
-                self.view.handlekey("END") # NB. call via handlekey triggers cursor redraw.
-            self.view = self.fl[fname]
-            self.is_visible = True
+                if fname not in self.fl:
+                    self.fl[fname] = EditView(console=self, data=RenPyData(self.fname), lnr=lnr)
+                else:
+                    self.view.lnr = lnr
+                    self.view.handlekey("END") # NB. call via handlekey triggers cursor redraw.
+                self.view = self.fl[fname]
+                self.is_visible = True
 
         def exit(self, discard=False, apply=False):
             """
