@@ -263,12 +263,9 @@ init -1500 python in _editor:
             if self.console.cw:
                 self.handlekey("DELETE")
 
-        def paste(self):
+        def insert(self, s):
             if self.console.cw:
                 self.handlekey("DELETE")
-            self.insert(self.copied)
-
-        def insert(self, s):
             x = self.console.cx
             buf = self.data[self.lnr+self.console.cy]
             self.data[self.lnr+self.console.cy] = buf[:x] + s + buf[x:]
@@ -424,7 +421,7 @@ screen editor:
 
         key "ctrl_K_c" action Function(editor.view.copy)
         key "ctrl_K_x" action Function(editor.view.cut)
-        key "ctrl_K_v" action Function(editor.view.paste)
+        key "ctrl_K_v" action Function(editor.view.insert, editor.view.copied)
 
         key "K_TAB" action Function(view.insert, "    ")
         key "K_SPACE" action Function(view.insert, " ")
