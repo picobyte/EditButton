@@ -68,6 +68,10 @@ init -1500 python in _editor:
             self.history = History()
             self.start_change = 0
 
+        @property
+        def changed(self):
+            return len(self.history._undo) > self.start_change
+
         def __setitem__(self, ndx, value):
             if value != self.data[ndx]:
                 self.history.append(["__setitem__", ndx, self.data[ndx]])
@@ -80,7 +84,7 @@ init -1500 python in _editor:
         def save(self):
             import shutil
             from tempfile import mkstemp
-            if len(self.history._undo) > self.start_change: # any changes?
+            if self.changed: # any changes?
                 fh, abs_path = mkstemp()
                 for line in self.data:
                     os.write(fh, line + os.linesep)
@@ -162,9 +166,6 @@ init -1500 python in _editor:
             if self.show_errors is not None:
                 self.show_errors = "\n{color=#f00}{size=-10}" + os.linesep.join(err) +"{/size}{/color}" if err else ""
 
-        def gotoline(self, lineno):
-            return min(max(lineno, 0), len(self.data)-self.console.cy-1)
-
         def UP(self, sub=1):
             sub = min(self.console.cy + self.lnr, sub)
             part = min(self.console.cy, sub)
@@ -204,7 +205,6 @@ init -1500 python in _editor:
                                "BACKSLASH", "SEMICOLON", "QUOTE", "COMMA", "PERIOD", "SLASH"]
             self.oSymLow = r"`-=[]\;',./"
             self.oSymUpp = r'~_+{}|:"<>?'
-            self.changed = False
             self.copied = ""
 
         def LEFT(self, sub=1): self.console.max = max(self.console.cx - sub, 0)
@@ -230,28 +230,24 @@ init -1500 python in _editor:
             self.data.insert(y+1, self.data[y][self.console.cx:])
             self.data[y] = self.data[y][:self.console.cx]
             self.parse()
-            self.changed = True
             self.console.max = 0
             self.DOWN()
 
         def BACKSPACE(self):
             cons = self.console
-
-            y = self.lnr+cons.cy
-
-            self.changed = True
-            if cons.cx or cons.cx != cons.CX:
+            if cons.cx != cons.CX:
+                return self.DELETE()
+            if cons.cx:
                 self.LEFT()
                 cons.cx = min(cons.max, len(self.line))
                 self.DELETE()
-                if cons.cx != cons.CX:
-                    cons.max += cons.CX
-            else:
-                if self.lnr + cons.cy != 0: #FIXME
-                    cons.max = len(self.data[y - 1])
-                    self.data[y - 1] += self.data[y]
-                    del self.data[y]
-                    self.UP()
+                cons.max += cons.CX
+            elif self.lnr + cons.cy != 0:
+                y = self.lnr+cons.cy
+                cons.max = len(self.data[y - 1])
+                self.data[y - 1] += self.data[y]
+                del self.data[y]
+                self.UP()
             self.parse()
 
         def DELETE(self):
@@ -259,7 +255,6 @@ init -1500 python in _editor:
             s, e = (cons.cx, cons.CX) if cons.cx < cons.CX else (cons.CX, cons.cx)
             y = self.lnr+cons.cy
             buf = self.data[y]
-            self.changed = True
             if s != len(self.line):
                 if e == s:
                     e += 1
@@ -293,7 +288,6 @@ init -1500 python in _editor:
             self.console.max += len(s)
             self.console.CX = self.console.cx = min(self.console.max, len(self.line))
             renpy.redraw(self.console, 0)
-            self.changed = True
             self.parse()
 
         def handlekey(self, keystr):
@@ -309,9 +303,6 @@ init -1500 python in _editor:
         def display(self):
             ll = min(self.lnr + self.nolines, len(self.data))
             return self.colorize(os.linesep.join(self.colored_data[self.lnr:ll]), self.lnr != 0, ll != len(self.data)) + (self.show_errors if self.show_errors else "")
-
-        def external_editor(self, ctxt, transient=1):
-            renpy.exports.launch_editor([ctxt[0]], ctxt[1], transient=transient)
 
         def ctrl_z(self):
             self.data.undo()
@@ -472,7 +463,7 @@ screen editor:
 
             xalign 0.5
             yalign 1.0
-            if view.changed:
+            if view.data.changed:
                 if not renpy.parser.parse_errors:
                     textbutton _("Apply") action [Function(editor.exit, apply = True), Return()]
                 elif view.show_errors is None:
