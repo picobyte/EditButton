@@ -223,25 +223,30 @@ init -1500 python in _editor:
             y = self.lnr+self.console.cy
 
             self.changed = True
-            if self.console.cx == 0:
+            if self.console.cx or self.console.cw:
+                self.LEFT()
+                self.console.cx = min(self.console.max, len(self.line))
+                self.DELETE()
+                if self.console.cw:
+                    self.console.max += self.console.cw
+            else:
                 if self.lnr + self.console.cy != 0: #FIXME
                     self.console.max = len(self.data[y - 1])
                     self.data[y - 1] += self.data[y]
                     del self.data[y]
                     self.UP()
-            else:
-                self.LEFT()
-                self.console.cx = min(self.console.max, len(self.line))
-                self.DELETE()
             self.parse()
 
         def DELETE(self):
             x = self.console.cx
             y = self.lnr+self.console.cy
+            ct = 1 if self.console.cw == 0 else self.console.cw
             buf = self.data[y]
             self.changed = True
-            if x != len(self.line):
-                self.data[y] = buf[:x] + buf[x+1:]
+            if x != len(self.line) or self.console.cw:
+                self.data[y] = buf[:x] + buf[x+ct:]
+                if self.console.cw:
+                    self.console.max -= ct
             elif y != self.nolines:
                 self.console.max = len(buf)
                 self.data[y] += self.data[y+1]
