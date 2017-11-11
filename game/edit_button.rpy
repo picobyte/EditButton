@@ -83,13 +83,13 @@ init -1500 python in _editor:
         def save(self):
             import shutil
             from tempfile import mkstemp
-            if len(self.history) > self.start_change: # any changes?
+            if len(self.history._undo) > self.start_change: # any changes?
                 fh, abs_path = mkstemp()
                 for line in self.data:
                     os.write(fh, line + os.linesep)
                 os.close(fh)
                 shutil.move(abs_path, self.fname)
-                self.start_change = len(self.history)
+                self.start_change = len(self.history._undo)
 
         def __delitem__(self, ndx):
             self.history.append(["insert", ndx, self.data[ndx]])
@@ -266,15 +266,6 @@ init -1500 python in _editor:
             self.console.cx = min(self.console.max, len(self.line))
             renpy.redraw(self.console, 0)
 
-        def save(self):
-            if self.changed:
-                fh, abs_path = mkstemp()
-                for line in self.data:
-                    os.write(fh, line + os.linesep)
-                os.close(fh)
-                shutil.move(abs_path, self.fname)
-                self.changed = False
-
         def colorize(self, txt, at_start=False, at_end=False):
             return ('{color=#000000}' if at_start else '') + txt + ('{/color}' if at_end else '')
 
@@ -350,7 +341,7 @@ init -1500 python in _editor:
                 self.view.data.load()
                 self.view.parse()
             elif apply:
-                self.view.save()
+                self.view.data.save()
 
     editor = Editor()
 
