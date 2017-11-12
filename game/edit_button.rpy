@@ -363,7 +363,7 @@ init -1500 python in _editor:
                 self.CX, self.CY = self.cx, self.cy
                 renpy.redraw(self, 0)
                 self.is_mouse_pressed = True
-            if self.is_mouse_pressed and ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP:
+            if self.is_mouse_pressed and (ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP):
                 self.CX, self.CY = self._getcycx(x, y)
                 self.CY = self.cy # TODO: allow multiple lines (and remove)
                 renpy.redraw(self, 0)
