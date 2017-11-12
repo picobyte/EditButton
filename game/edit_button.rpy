@@ -125,7 +125,7 @@ init -1500 python in _editor:
         def __init__(self, console, data, nolines=None, lnr=None, wheel_scroll_lines=None):
             self.data = data
             self.lnr = lnr if lnr else 0
-            self.lineLenMax = 109
+            self.lineLenMax = 111
             self.show_errors = ""
             self.wrapped_buffer = []
             self.keymap = set(['mousedown_4', 'mousedown_5'])
@@ -383,13 +383,13 @@ init -1500 python in _editor:
             elif self.cy < self.CY:
                 x = self.cx
                 for y in xrange(self.cy, self.CY):
-                    C.rect(color, (x*dx, y*dy, (len(self.view.data[self.view.lnr+y])-x)*dx, 0.95*dy))
+                    C.rect(color, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, 0.95*dy))
                     x = 0
                 C.rect(color, (0, self.CY*dy, self.CX*dx, 0.95*dy))
             else:
                 x = self.CX
                 for y in xrange(self.CY, self.cy):
-                    C.rect(color, (x*dx, y*dy, (len(self.view.data[self.view.lnr+y])-x)*dx, 0.95*dy))
+                    C.rect(color, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, 0.95*dy))
                     x = 0
                 C.rect(color, (0, self.cy*dy, self.cx*dx, 0.95*dy))
             return R
@@ -404,8 +404,7 @@ init -1500 python in _editor:
 
             if self.view.lnr + cy >= len(self.view.data):
                 cy -= self.view.lnr + cy - len(self.view.data) + 1
-
-            return (min(self.max, len(self.view.data[self.view.lnr+cy])), cy)
+            return (min(self.max, len(self.view.wrapped_buffer[cy])), cy)
 
         def event(self, ev, x, y, st):
             import pygame
