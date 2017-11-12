@@ -100,18 +100,6 @@ init -1500 python in _editor:
             self.history.append(["__delitem__", ndx])
             self.data.insert(ndx, value)
 
-        def undo(self):
-            if self.history.at >= 0:
-                act = self.history.undo()
-                if act is not None:
-                    getattr(self, act[0])(*act[1:])
-
-        def redo(self):
-            if self.history.at < len(self.history._undo):
-                act = self.history.redo()
-                if act is not None:
-                    getattr(self, act[0])(*act[1:])
-
     class RenPyData(ReadWriteData):
         def __init__(self, fname, format_style=None):
             super(RenPyData, self).__init__(fname)
@@ -339,12 +327,16 @@ init -1500 python in _editor:
             return self.colorize(os.linesep.join(self.colored_data[self.lnr:ll]), self.lnr != 0, ll != len(self.data)) + (self.show_errors if self.show_errors else "")
 
         def ctrl_z(self):
-            self.data.undo()
-            self.parse()
+            act = self.data.history.undo()
+            if act:
+                getattr(self.data, act[0])(*act[1:])
+                self.parse()
 
         def ctrl_y(self):
-            self.data.redo()
-            self.parse()
+            act = self.data.history.redo()
+            if act:
+                getattr(self.data, act[0])(*act[1:])
+                self.parse()
 
     class Editor(renpy.Displayable):
         def __init__(self, *a, **b):
