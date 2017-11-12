@@ -267,10 +267,11 @@ init -1500 python in _editor:
             sx, ex, sy, ey = self._ordered_coords()
 
             if sx != len(self.line) or sx != ex or sy != ey:
-                self.data[sy] = self.data[sy][:sx] + self.data[ey][ex:]
+                start = self.data[sy][:sx]
                 while sy != ey:
-                    sy += 1
                     del self.data[sy]
+                    ey -= 1
+                self.data[sy] = start + self.data[sy][ex:]
                 self.console.max = self.console.CX = sx
             elif sy < self.nolines - 1:
                 self.console.max = len(self.data[sy])
