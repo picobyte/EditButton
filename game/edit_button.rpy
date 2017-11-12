@@ -195,6 +195,7 @@ init -1500 python in _editor:
             self._add_km(['BACKSPACE', 'DELETE', 'RETURN'], ['repeat_', ''])
             self._add_km(['HOME', 'END'], ['shift_', ''])
             self._add_km(['LEFT', 'RIGHT'], ['shift_', 'ctrl_', 'ctrl_shift_', 'repeat_ctrl_shift_','', 'repeat_shift_', 'repeat_ctrl_', 'repeat_'])
+            self._add_km(['UP', 'DOWN'], ['shift_', 'repeat_shift_'])
             self.fontsize = 34
             self.handlekey("END")
             # FIXME: this is QWERTY keyboard specific.
@@ -251,20 +252,22 @@ init -1500 python in _editor:
         def _ordered_coords(self):
             sx, ex = self.console.cx, self.console.CX
             sy, ey = (self.console.cy+self.lnr, self.console.CY+self.lnr)
+            none_selected = 0
 
             if sy > ey:
                 sy, ey = ey, sy
                 sx, ex = ex, sx
 
             elif sy == ey:
-                if sx == ex:
-                    ex += 1
-                elif ex < sx:
+                if ex < sx:
                     sx, ex = ex, sx
-            return (sx, ex, sy, ey)
+                elif sx == ex:
+                    none_selected = 1
+            return (sx, ex, sy, ey, none_selected)
 
         def DELETE(self):
-            sx, ex, sy, ey = self._ordered_coords()
+            sx, ex, sy, ey, none_selected = self._ordered_coords()
+            sx += none_selected # then delete the one left to the cursor
 
             if sx != len(self.line) or sx != ex or sy != ey:
                 start = self.data[sy][:sx]
@@ -281,16 +284,17 @@ init -1500 python in _editor:
 
         def copy(self):
             import pyperclip
-            sx, ex, sy, ey = self._ordered_coords()
-            copy = ""
-            for y in xrange(sy, ey):
-                copy += self.data[y][sx:len(self.data[y])] + os.linesep
-                sx = 0
-            pyperclip.copy(copy+self.data[ey][sx:ex])
+            sx, ex, sy, ey, none_selected = self._ordered_coords()
+            if not none_selected:
+                copy = ""
+                for y in xrange(sy, ey):
+                    copy += self.data[y][sx:len(self.data[y])] + os.linesep
+                    sx = 0
+                pyperclip.copy(copy+self.data[ey][sx:ex])
 
         def cut(self):
-            self.copy()
             if self.console.CX != self.console.cx or self.console.CY != self.console.cy:
+                self.copy()
                 self.handlekey("DELETE")
 
         def insert(self, lines=None):
@@ -408,6 +412,7 @@ init -1500 python in _editor:
                 self.CX, self.CY = self._getcycx(x, y)
                 renpy.redraw(self, 0)
                 if ev.type == pygame.MOUSEBUTTONUP:
+                    self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
                     self.is_mouse_pressed = False
 
         def start(self, ctxt, offset=2):
