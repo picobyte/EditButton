@@ -44,8 +44,9 @@ init -1500 python in _editor:
                 self.mode = 1
                 return self._undo[self.at-1]
         def redo(self):
-            self.mode = 2
-            return self._undo[self.at]
+            if self.at < len(self._undo):
+                self.mode = 2
+                return self._undo[self.at]
 
     class ReadOnlyData(object):
         """ container and load interface for the read only data """
@@ -84,7 +85,7 @@ init -1500 python in _editor:
         def save(self):
             import shutil
             from tempfile import mkstemp
-            if self.changed: # any changes?
+            if self.changed:
                 fh, abs_path = mkstemp()
                 for line in self.data:
                     os.write(fh, line + os.linesep)
@@ -127,10 +128,10 @@ init -1500 python in _editor:
             self.show_errors = ""
             self.wrapped_buffer = []
             self.keymap = set(['mousedown_4', 'mousedown_5'])
+            # XXX default nolines should be relative to window + font size
             self._maxlines = nolines if nolines else int(config.screen_height / (34 + style.default.line_leading + style.default.line_spacing)) - 1
             self.nolines = self._maxlines
             self.parse()
-            # XXX default nolines should be relative to window + font size
             self._add_km(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['repeat_', ''])
             self._add_km(['HOME', 'END'], ['ctrl_'])
             self.console = console
@@ -163,7 +164,7 @@ init -1500 python in _editor:
             cursor_movement = min(self.console.cy, sub)
             self.console.cy -= cursor_movement
             self.lnr -= sub - cursor_movement
-            if cursor_movement == 0: #then view was moved, rewrap
+            if cursor_movement == 0: # then view was moved
                 self.rewrap()
 
         def DOWN(self, add=1):
@@ -196,6 +197,7 @@ init -1500 python in _editor:
             self._add_km(['LEFT', 'RIGHT'], ['shift_', 'ctrl_', 'ctrl_shift_', 'repeat_ctrl_shift_','', 'repeat_shift_', 'repeat_ctrl_', 'repeat_'])
             self.fontsize = 34
             self.handlekey("END")
+            # FIXME: this is QWERTY keyboard specific.
             self.nrSymbol = ")!@#$%^&*("
             self.oSymName = [ "BACKQUOTE", "MINUS", "EQUALS", "LEFTBRACKET", "RIGHTBRACKET",
                                "BACKSLASH", "SEMICOLON", "QUOTE", "COMMA", "PERIOD", "SLASH"]
@@ -326,17 +328,26 @@ init -1500 python in _editor:
             ll = min(self.lnr + self.nolines, len(self.data))
             return self.colorize(os.linesep.join(self.colored_data[self.lnr:ll]), self.lnr != 0, ll != len(self.data)) + (self.show_errors if self.show_errors else "")
 
+        def _act_out(self, func, ndx, *args):
+            getattr(self.data, func)(ndx, *args)
+            self.parse()
+            self.console.cy = self.console.CY = ndx - self.lnr
+            if self.console.cy < 0:
+                self.UP(-self.console.cy)
+            elif self.console.cy >= self.nolines:
+                self.DOWN(self.console.cy-self.nolines-1)
+            self.console.cx = self.console.CX = 0
+            self.rewrap()
+
         def ctrl_z(self):
             act = self.data.history.undo()
             if act:
-                getattr(self.data, act[0])(*act[1:])
-                self.parse()
+                self._act_out(*act)
 
         def ctrl_y(self):
             act = self.data.history.redo()
             if act:
-                getattr(self.data, act[0])(*act[1:])
-                self.parse()
+                self._act_out(*act)
 
     class Editor(renpy.Displayable):
         def __init__(self, *a, **b):
