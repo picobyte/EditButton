@@ -278,7 +278,7 @@ init -1500 python in _editor:
                     ey -= 1
                 self.data[sy] = start + self.data[sy][ex:]
                 self.console.cy = self.console.CY = sy - self.lnr
-                self.console.max = self.console.CX = sx
+                self.console.max = self.console.cx = self.console.CX = sx
             elif sy < self.nolines - 1:
                 self.console.max = len(self.data[sy])
                 self.data[sy] += self.data[sy+1]
@@ -305,7 +305,7 @@ init -1500 python in _editor:
             if entries == None: # is paste in absences of entries
                 entries = pyperclip.paste().split(os.linesep)
             if self.console.CX != self.console.cx or self.console.CY != self.console.cy:
-                self.handlekey("DELETE")
+                self.DELETE()
             buf = self.data[self.lnr+self.console.cy]
             end = buf[self.console.cx:]
             self.data[self.lnr+self.console.cy] = buf[:self.console.cx] + entries[0]
