@@ -277,7 +277,7 @@ init -1500 python in _editor:
                     del self.data[sy]
                     ey -= 1
                 self.data[sy] = start + self.data[sy][ex:]
-                self.console.cy = self.console.CY = sy
+                self.console.cy = self.console.CY = sy - self.lnr
                 self.console.max = self.console.CX = sx
             elif sy < self.nolines - 1:
                 self.console.max = len(self.data[sy])
