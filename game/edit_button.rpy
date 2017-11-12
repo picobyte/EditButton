@@ -420,7 +420,6 @@ init -1500 python in _editor:
                 renpy.redraw(self, 0)
                 if ev.type == pygame.MOUSEBUTTONUP:
                     self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
-                    print (str((self.CX, self.CY, self.cx, self.cy)))
                     self.is_mouse_pressed = False
 
         def start(self, ctxt, offset=2):
