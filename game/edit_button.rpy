@@ -355,12 +355,17 @@ init -1500 python in _editor:
             dx = width / 110
             dy = height / 31
             color = (255,255,255,255)
-            if self.CX == self.cx:
-                C.line(color,(self.cx*dx,self.cy*dy),(self.cx*dx, (self.cy+0.95)*dy))
-            elif self.cy == self.CY:
-                C.rect(color,(self.cx*dx, self.cy*dy, (self.CX-self.cx)*dx, 0.95*dy))
-            elif self.cy != self.CY:
-                renpy.error("Multi line selection not yet implemented")
+            if self.cy == self.CY:
+                if self.CX == self.cx:
+                    C.line(color,(self.cx*dx,self.cy*dy),(self.cx*dx, (self.cy+0.95)*dy))
+                else:
+                    C.rect(color,(self.cx*dx, self.cy*dy, (self.CX-self.cx)*dx, 0.95*dy))
+            else:
+                x = self.cx
+                for y in xrange(self.cy, self.CY):
+                    C.rect(color, (x*dx, y*dy, (len(self.view.data[self.view.lnr+y])-x)*dx, 0.95*dy))
+                    x = 0
+                C.rect(color, (0, self.CY*dy, self.CX*dx, 0.95*dy))
             return R
 
         def debug(self, do_show=False):
@@ -385,7 +390,6 @@ init -1500 python in _editor:
                 self.is_mouse_pressed = True
             if self.is_mouse_pressed and (ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP):
                 self.CX, self.CY = self._getcycx(x, y)
-                self.CY = self.cy # TODO: allow multiple lines (and remove)
                 renpy.redraw(self, 0)
                 if ev.type == pygame.MOUSEBUTTONUP:
                     self.is_mouse_pressed = False
