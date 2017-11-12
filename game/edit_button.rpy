@@ -11,6 +11,7 @@ init -1500 python in _editor:
     import os
     import re
     import codecs
+    import textwrap
 
     import math
 
@@ -34,11 +35,10 @@ init -1500 python in _editor:
             elif self.mode == 1:
                 self.at -= 1
                 self._undo[self.at] = what
-                self.mode = 0
             else:
                 self._undo[self.at] = what
                 self.at += 1
-                self.mode = 0
+            self.mode = 0
         def undo(self):
             if self.at > 0 and self.at <= len(self._undo):
                 self.mode = 1
@@ -151,14 +151,20 @@ init -1500 python in _editor:
         def line(self): return self.data[self.lnr+self.console.cy]
 
         @property
-        def nolines(self):
-            # for each in displaydata,
+        def nolines(self, start=None, end=None):
+            """ how many lines are shown in current display"""
+            if start == None:
+                start = self.lnr
+            if end == None:
+                end = min(self.lnr + self._nolines, len(self.data))
             nolines = 0
-            for i in xrange(self.lnr, min(self.lnr + self._nolines, len(self.data))):
-                line_wraps = int(len(self.data[i])/self.lineLenMax) + 1
-                if nolines + line_wraps > self._nolines:
+            tot = self._nolines
+            for line in self.data[start:end]:
+                l = len(textwrap.wrap(line, self.lineLenMax))
+                tot -= l if l else 1 # because textwrap.wrap('') returns []
+                if tot < 0:
                     break
-                nolines += line_wraps
+                nolines += 1
             return nolines
 
         def parse(self):
