@@ -49,7 +49,7 @@ init -1500 python in _editor:
                 return self._undo[self.at]
 
     class ReadOnlyData(object):
-        """ container and load interface for the read only data """
+        """ container and load interface for read only data """
         def __init__(self, fname): self.load(fname)
         def __getitem__(self, ndx): return self.data[ndx]
         def __len__(self): return len(self.data)
@@ -63,7 +63,7 @@ init -1500 python in _editor:
                 self.data.append(line.rstrip(u"\r\n"))
 
     class ReadWriteData(ReadOnlyData):
-        """ allows edit and save """
+        """ also allows edit and save """
         def __init__(self, fname):
             super(ReadWriteData, self).__init__(fname)
             self.history = History()
@@ -109,6 +109,7 @@ init -1500 python in _editor:
             self._last_parsed_changes = None
 
         def parse(self):
+            """ If changes were not yet parsed, check for errors, and create the colored_buffer for view on screen """
             if self.history.at != self._last_parsed_changes:
                 document = os.linesep.join(self.data)
                 renpy.parser.parse_errors = []
@@ -142,6 +143,7 @@ init -1500 python in _editor:
         def line(self): return self.data[self.lnr+self.console.cy]
 
         def rewrap(self):
+            """ a copy of the buffer in view that is wrapped as shown in view """
             self.wrapped_buffer = []
             self.nolines = 0
             tot = 0
@@ -249,7 +251,7 @@ init -1500 python in _editor:
                 self.UP()
             self.parse()
 
-        def _ordered_coords(self):
+        def _ordered_cursor_coordinates(self):
             sx, ex = self.console.cx, self.console.CX
             sy, ey = (self.console.cy+self.lnr, self.console.CY+self.lnr)
             none_selected = 0
@@ -266,10 +268,10 @@ init -1500 python in _editor:
             return (sx, ex, sy, ey, none_selected)
 
         def DELETE(self):
-            sx, ex, sy, ey, none_selected = self._ordered_coords()
-            sx += none_selected # then delete the one left to the cursor
+            sx, ex, sy, ey, none_selected = self._ordered_cursor_coordinates()
 
-            if sx != len(self.line) or sx != ex or sy != ey:
+            if sx != len(self.line) or not none_selected:
+                ex += none_selected # then delete the one left to the cursor
                 start = self.data[sy][:sx]
                 while sy != ey:
                     del self.data[sy]
@@ -283,8 +285,8 @@ init -1500 python in _editor:
             self.parse()
 
         def copy(self):
-            import pyperclip
-            sx, ex, sy, ey, none_selected = self._ordered_coords()
+            import pyperclip # to use external copy buffer
+            sx, ex, sy, ey, none_selected = self._ordered_cursor_coordinates()
             if not none_selected:
                 copy = ""
                 for y in xrange(sy, ey):
@@ -297,29 +299,30 @@ init -1500 python in _editor:
                 self.copy()
                 self.handlekey("DELETE")
 
-        def insert(self, lines=None):
+        def insert(self, entries=None):
             import pyperclip
-            if lines == None:
-                lines = pyperclip.paste().split(os.linesep)
+            if entries == None: # is paste in absences of entries
+                entries = pyperclip.paste().split(os.linesep)
             if self.console.CX != self.console.cx or self.console.CY != self.console.cy:
                 self.handlekey("DELETE")
             buf = self.data[self.lnr+self.console.cy]
             end = buf[self.console.cx:]
-            self.data[self.lnr+self.console.cy] = buf[:self.console.cx] + lines[0]
-            ct = len(lines)
+            self.data[self.lnr+self.console.cy] = buf[:self.console.cx] + entries[0]
+            ct = len(entries)
             if ct > 1:
                 for i in xrange(1, ct):
                     self.lnr += 1
-                    self.data.insert(self.lnr+self.console.cy, lines[i])
-                self.console.max = len(lines[ct-1])
+                    self.data.insert(self.lnr+self.console.cy, entries[i])
+                self.console.max = len(entries[ct-1])
             else:
-                self.console.max += len(lines[0])
+                self.console.max += len(entries[0])
             self.data[self.lnr+self.console.cy] += end
             self.console.CX = self.console.cx = min(self.console.max, len(self.line))
             renpy.redraw(self.console, 0)
             self.parse()
 
         def handlekey(self, keystr):
+            """ repeat keys are handled as normal keys; unless shift is provided selection is discarded and cursor is redrawn """
             getattr(self, re.sub(r'^(?:repeat_)?(ctrl_|meta_|alt_|)(?:shift_)?K_', r'\1', keystr))()
             self.console.cx = min(self.console.max, len(self.line))
             if "shift_" not in keystr:
@@ -334,6 +337,7 @@ init -1500 python in _editor:
             return self.colorize(os.linesep.join(self.colored_data[self.lnr:ll]), self.lnr != 0, ll != len(self.data)) + (self.show_errors if self.show_errors else "")
 
         def _act_out(self, func, ndx, *args):
+            """ handle undo/redo. Also makes sure the action remains in view """
             getattr(self.data, func)(ndx, *args)
             self.parse()
             self.console.cy = self.console.CY = ndx - self.lnr
@@ -364,6 +368,7 @@ init -1500 python in _editor:
             self.exit() # sets is_visible and cursor coords to default
 
         def render(self, width, height, st, at):
+            """ draw the cursor or the selection """
             R = renpy.Render(width, height)
             C = R.canvas()
             dx = width / 110
@@ -388,11 +393,11 @@ init -1500 python in _editor:
                 C.rect(color, (0, self.cy*dy, self.cx*dx, 0.95*dy))
             return R
 
-        def debug(self, do_show=False):
+        def show_debug_messages(self, do_show):
             self.view.show_errors = "" if do_show else None
             self.view.parse()
 
-        def _getcycx(self, x, y):
+        def _screen_to_cursor_coordinates(self, x, y):
             self.max = int(x * 113.3 / config.screen_width)
             cy = int(y * 31.5 / config.screen_height)
 
@@ -404,12 +409,12 @@ init -1500 python in _editor:
         def event(self, ev, x, y, st):
             import pygame
             if ev.type == pygame.MOUSEBUTTONDOWN:
-                self.cx, self.cy = self._getcycx(x, y)
+                self.cx, self.cy = self._screen_to_cursor_coordinates(x, y)
                 self.CX, self.CY = self.cx, self.cy
                 renpy.redraw(self, 0)
                 self.is_mouse_pressed = True
             if self.is_mouse_pressed and (ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP):
-                self.CX, self.CY = self._getcycx(x, y)
+                self.CX, self.CY = self._screen_to_cursor_coordinates(x, y)
                 renpy.redraw(self, 0)
                 if ev.type == pygame.MOUSEBUTTONUP:
                     self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
@@ -430,9 +435,7 @@ init -1500 python in _editor:
                 self.is_visible = True
 
         def exit(self, discard=False, apply=False):
-            """
-            Applied changes are not visible until reload (shift+R).
-            """
+            """ unless discarded, changes are kept in store. Applied changes are not visible until reload (shift+R). """
             self.is_visible = False
             self.max = self.cx = self.cy = self.CX = self.CY = 0 # last two are meant for dragging
             if discard:
@@ -520,8 +523,8 @@ screen editor:
                 if not renpy.parser.parse_errors:
                     textbutton _("Apply") action [Function(editor.exit, apply = True), Return()]
                 elif view.show_errors is None:
-                    textbutton _("Debug") action Function(editor.debug, True)
+                    textbutton _("Debug") action Function(editor.show_debug_messages, True)
                 else:
-                    textbutton _("Silence") action Function(editor.debug)
+                    textbutton _("Silence") action Function(editor.show_debug_messages, False)
                 textbutton _("Cancel") action [Function(editor.exit, discard = True), Return()]
             textbutton _("Visual") action [Function(editor.exit), Return()]
