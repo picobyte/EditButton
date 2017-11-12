@@ -243,7 +243,7 @@ init -1500 python in _editor:
 
         def BACKSPACE(self):
             cons = self.console
-            if cons.cx != cons.CX:
+            if cons.cx != cons.CX or cons.cy != cons.CY:
                 return self.DELETE()
             if cons.cx:
                 self.LEFT()
@@ -260,18 +260,29 @@ init -1500 python in _editor:
 
         def DELETE(self):
             cons = self.console
-            s, e = (cons.cx, cons.CX) if cons.cx < cons.CX else (cons.CX, cons.cx)
-            y = self.lnr+cons.cy
-            buf = self.data[y]
-            if s != len(self.line):
-                if e == s:
-                    e += 1
-                self.data[y] = buf[:s] + buf[e:]
-                cons.max = cons.CX = s
-            elif y < self.nolines - 1:
-                cons.max = len(buf)
-                self.data[y] += self.data[y+1]
-                del self.data[y+1]
+            sx, ex = cons.cx, cons.CX
+            sy, ey = (cons.cy+self.lnr, cons.CY+self.lnr)
+
+            if sy > ey:
+                sy, ey = ey, sy
+                sx, ex = ex, sx
+
+            elif sy == ey:
+                if sx == ex:
+                    ex += 1
+                elif ex < sx:
+                    sx, ex = ex, sx
+
+            if sx != len(self.line) or sx != ex or sy != ey:
+                self.data[sy] = self.data[sy][:sx] + self.data[ey][ex:]
+                while sy != ey:
+                    sy += 1
+                    del self.data[sy]
+                cons.max = cons.CX = sx
+            elif sy < self.nolines - 1:
+                cons.max = len(self.data[sy])
+                self.data[sy] += self.data[sy+1]
+                del self.data[sy+1]
             self.parse()
 
         def copy(self):
@@ -282,14 +293,14 @@ init -1500 python in _editor:
 
         def cut(self):
             self.copy()
-            if self.console.CX != self.console.cx:
+            if self.console.CX != self.console.cx or self.console.CY != self.console.cy:
                 self.handlekey("DELETE")
 
         def insert(self, lines=None):
             import pyperclip
             if lines == None:
                 lines = pyperclip.paste().split(os.linesep)
-            if self.console.CX != self.console.cx:
+            if self.console.CX != self.console.cx or self.console.CY != self.console.cy:
                 self.handlekey("DELETE")
             buf = self.data[self.lnr+self.console.cy]
             end = buf[self.console.cx:]
