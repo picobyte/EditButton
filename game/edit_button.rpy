@@ -285,15 +285,24 @@ init -1500 python in _editor:
             if self.console.CX != self.console.cx:
                 self.handlekey("DELETE")
 
-        def insert(self, s=None):
+        def insert(self, lines=None):
             import pyperclip
-            if s == None:
-                s = pyperclip.paste()
+            if lines == None:
+                lines = pyperclip.paste().split(os.linesep)
             if self.console.CX != self.console.cx:
                 self.handlekey("DELETE")
             buf = self.data[self.lnr+self.console.cy]
-            self.data[self.lnr+self.console.cy] = buf[:self.console.cx] + s + buf[self.console.cx:]
-            self.console.max += len(s)
+            end = buf[self.console.cx:]
+            self.data[self.lnr+self.console.cy] = buf[:self.console.cx] + lines[0]
+            ct = len(lines)
+            if ct > 1:
+                for i in xrange(1, ct):
+                    self.lnr += 1
+                    self.data.insert(self.lnr+self.console.cy, lines[i])
+                self.console.max = len(lines[ct-1])
+            else:
+                self.console.max += len(lines[0])
+            self.data[self.lnr+self.console.cy] += end
             self.console.CX = self.console.cx = min(self.console.max, len(self.line))
             renpy.redraw(self.console, 0)
             self.parse()
@@ -417,7 +426,7 @@ screen editor:
     frame:
 
         add editor
-        text editor.view.display() style "editor"
+        text view.display() style "editor"
 
         for keystr in sorted(view.keymap, key=len):
             key keystr action Function(view.handlekey, keystr)
@@ -431,40 +440,40 @@ screen editor:
 
         key "K_ESCAPE" action [Function(editor.exit), Return()]
 
-        key "ctrl_K_c" action Function(editor.view.copy)
-        key "ctrl_K_x" action Function(editor.view.cut)
-        key "ctrl_K_v" action Function(editor.view.insert)
+        key "ctrl_K_c" action Function(view.copy)
+        key "ctrl_K_x" action Function(view.cut)
+        key "ctrl_K_v" action Function(view.insert)
 
-        key "K_TAB" action Function(view.insert, "    ")
-        key "K_SPACE" action Function(view.insert, " ")
-        key "repeat_K_SPACE" action Function(view.insert, " ")
+        key "K_TAB" action Function(view.insert, ["    "])
+        key "K_SPACE" action Function(view.insert, [" "])
+        key "repeat_K_SPACE" action Function(view.insert, [" "])
 
         for i in xrange(0, len(view.oSymName)):
-            key "K_"+view.oSymName[i] action Function(view.insert, view.oSymLow[i])
-            key "shift_K_"+view.oSymName[i] action Function(view.insert, view.oSymUpp[i])
-            key "repeat_K_"+view.oSymName[i] action Function(view.insert, view.oSymLow[i])
-            key "repeat_shift_K_"+view.oSymName[i] action Function(view.insert, view.oSymUpp[i])
+            key "K_"+view.oSymName[i] action Function(view.insert, [view.oSymLow[i]])
+            key "shift_K_"+view.oSymName[i] action Function(view.insert, [view.oSymUpp[i]])
+            key "repeat_K_"+view.oSymName[i] action Function(view.insert, [view.oSymLow[i]])
+            key "repeat_shift_K_"+view.oSymName[i] action Function(view.insert, [view.oSymUpp[i]])
 
         for nr in xrange(0, 10):
-            key "K_"+str(nr) action Function(view.insert, str(nr))
-            key "K_KP"+str(nr) action Function(view.insert, str(nr))
-            key "repeat_K_"+str(nr) action Function(view.insert, str(nr))
-            key "repeat_K_KP"+str(nr) action Function(view.insert, str(nr))
-            key "shift_K_"+str(nr) action Function(view.insert, view.nrSymbol[nr])
-            key "repeat_shift_K_"+str(nr) action Function(view.insert, view.nrSymbol[nr])
+            key "K_"+str(nr) action Function(view.insert, [str(nr)])
+            key "K_KP"+str(nr) action Function(view.insert, [str(nr)])
+            key "repeat_K_"+str(nr) action Function(view.insert, [str(nr)])
+            key "repeat_K_KP"+str(nr) action Function(view.insert, [str(nr)])
+            key "shift_K_"+str(nr) action Function(view.insert, [view.nrSymbol[nr]])
+            key "repeat_shift_K_"+str(nr) action Function(view.insert, [view.nrSymbol[nr]])
 
         for c in xrange(ord('a'), ord('z')+1):
-            key "K_"+chr(c) action Function(view.insert, chr(c))
-            key "shift_K_"+chr(c) action Function(view.insert, chr(c).upper())
-            key "repeat_K_"+chr(c) action Function(view.insert, chr(c))
-            key "repeat_shift_K_"+chr(c) action Function(view.insert, chr(c).upper())
+            key "K_"+chr(c) action Function(view.insert, [chr(c)])
+            key "shift_K_"+chr(c) action Function(view.insert, [chr(c).upper()])
+            key "repeat_K_"+chr(c) action Function(view.insert, [chr(c)])
+            key "repeat_shift_K_"+chr(c) action Function(view.insert, [chr(c).upper()])
 
-        key "K_KP_PERIOD" action Function(view.insert, ".")
-        key "K_KP_DIVIDE" action Function(view.insert, "/")
-        key "K_KP_MULTIPLY" action Function(view.insert, "*")
-        key "K_KP_MINUS" action Function(view.insert, "-")
-        key "K_KP_PLUS" action Function(view.insert, "+")
-        key "K_KP_EQUALS" action Function(view.insert, "=")
+        key "K_KP_PERIOD" action Function(view.insert, ["."])
+        key "K_KP_DIVIDE" action Function(view.insert, ["/"])
+        key "K_KP_MULTIPLY" action Function(view.insert, ["*"])
+        key "K_KP_MINUS" action Function(view.insert, ["-"])
+        key "K_KP_PLUS" action Function(view.insert, ["+"])
+        key "K_KP_EQUALS" action Function(view.insert, ["="])
 
         hbox:
             style_prefix "quick"
