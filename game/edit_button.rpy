@@ -258,10 +258,9 @@ init -1500 python in _editor:
                 self.UP()
             self.parse()
 
-        def DELETE(self):
-            cons = self.console
-            sx, ex = cons.cx, cons.CX
-            sy, ey = (cons.cy+self.lnr, cons.CY+self.lnr)
+        def _ordered_coords(self):
+            sx, ex = self.console.cx, self.console.CX
+            sy, ey = (self.console.cy+self.lnr, self.console.CY+self.lnr)
 
             if sy > ey:
                 sy, ey = ey, sy
@@ -272,24 +271,31 @@ init -1500 python in _editor:
                     ex += 1
                 elif ex < sx:
                     sx, ex = ex, sx
+            return (sx, ex, sy, ey)
+
+        def DELETE(self):
+            sx, ex, sy, ey = self._ordered_coords()
 
             if sx != len(self.line) or sx != ex or sy != ey:
                 self.data[sy] = self.data[sy][:sx] + self.data[ey][ex:]
                 while sy != ey:
                     sy += 1
                     del self.data[sy]
-                cons.max = cons.CX = sx
+                self.console.max = self.console.CX = sx
             elif sy < self.nolines - 1:
-                cons.max = len(self.data[sy])
+                self.console.max = len(self.data[sy])
                 self.data[sy] += self.data[sy+1]
                 del self.data[sy+1]
             self.parse()
 
         def copy(self):
             import pyperclip
-            cons = self.console
-            s, e = (cons.cx, cons.CX) if cons.cx < cons.CX else (cons.CX, cons.cx)
-            pyperclip.copy(self.data[self.lnr+self.console.cy][s:e])
+            sx, ex, sy, ey = self._ordered_coords()
+            copy = ""
+            for y in xrange(sy, ey):
+                copy += self.data[y][sx:len(self.data[y])] + os.linesep
+                sx = 0
+            pyperclip.copy(copy+self.data[ey][sx:ex])
 
         def cut(self):
             self.copy()
