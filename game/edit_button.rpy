@@ -249,7 +249,7 @@ init -1500 python in _editor:
                 self.LEFT()
                 cons.cx = min(cons.max, len(self.line))
                 self.DELETE()
-                cons.max += cons.CX
+                cons.max += cons.CX - cons.cx
             elif self.lnr + cons.cy != 0:
                 y = self.lnr+cons.cy
                 cons.max = len(self.data[y - 1])
