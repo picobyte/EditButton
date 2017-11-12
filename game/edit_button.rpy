@@ -374,10 +374,10 @@ init -1500 python in _editor:
             C = R.canvas()
             dx = width / 110
             dy = height / 31
-            color = (255,255,255,255)
+            color = (16,16,16,255)
             if self.cy == self.CY:
                 if self.CX == self.cx:
-                    C.line(color,(self.cx*dx,self.cy*dy),(self.cx*dx, (self.cy+0.95)*dy))
+                    C.line((255,255,255,255),(self.cx*dx,self.cy*dy),(self.cx*dx, (self.cy+0.95)*dy))
                 else:
                     C.rect(color,(self.cx*dx, self.cy*dy, (self.CX-self.cx)*dx, 0.95*dy))
             elif self.cy < self.CY:
