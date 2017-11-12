@@ -415,10 +415,12 @@ init -1500 python in _editor:
                 renpy.redraw(self, 0)
                 self.is_mouse_pressed = True
             if self.is_mouse_pressed and (ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP):
-                self.CX, self.CY = self._screen_to_cursor_coordinates(x, y)
+                if ev.type == pygame.MOUSEMOTION:
+                    self.CX, self.CY = self._screen_to_cursor_coordinates(x, y)
                 renpy.redraw(self, 0)
                 if ev.type == pygame.MOUSEBUTTONUP:
                     self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
+                    print (str((self.CX, self.CY, self.cx, self.cy)))
                     self.is_mouse_pressed = False
 
         def start(self, ctxt, offset=2):
