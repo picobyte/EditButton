@@ -137,10 +137,12 @@ init -1500 python in _editor:
             self.lnr = lnr if lnr else 0
             self.lineLenMax = 109
             self.show_errors = ""
+            self.wrapped_buffer = []
             self.keymap = set(['mousedown_4', 'mousedown_5'])
+            self._maxlines = nolines if nolines else int(config.screen_height / (34 + style.default.line_leading + style.default.line_spacing)) - 1
+            self.nolines = self._maxlines
             self.parse()
             # XXX default nolines should be relative to window + font size
-            self._nolines = nolines if nolines else int(config.screen_height / (34 + style.default.line_leading + style.default.line_spacing)) - 1
             self._add_km(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['repeat_', ''])
             self._add_km(['HOME', 'END'], ['ctrl_'])
             self.console = console
@@ -150,39 +152,39 @@ init -1500 python in _editor:
         @property
         def line(self): return self.data[self.lnr+self.console.cy]
 
-        @property
-        def nolines(self, start=None, end=None):
-            """ how many lines are shown in current display"""
-            if start == None:
-                start = self.lnr
-            if end == None:
-                end = min(self.lnr + self._nolines, len(self.data))
-            nolines = 0
-            tot = self._nolines
-            for line in self.data[start:end]:
-                l = len(textwrap.wrap(line, self.lineLenMax))
-                tot -= l if l else 1 # because textwrap.wrap('') returns []
-                if tot < 0:
+        def rewrap(self):
+            self.wrapped_buffer = []
+            self.nolines = 0
+            tot = 0
+            for line in self.data[self.lnr:min(self.lnr + self._maxlines, len(self.data))]:
+                wrap = textwrap.wrap(line, self.lineLenMax) or [''] # because textwrap.wrap('') returns []
+                tot += len(wrap)
+                if tot > self._maxlines:
                     break
-                nolines += 1
-            return nolines
+                self.nolines += 1
+                self.wrapped_buffer.extend(wrap)
 
         def parse(self):
             (self.colored_data, err) = self.data.parse()
+            self.rewrap()
             if self.show_errors is not None:
                 self.show_errors = "\n{color=#f00}{size=-10}" + os.linesep.join(err) +"{/size}{/color}" if err else ""
 
         def UP(self, sub=1):
             sub = min(self.console.cy + self.lnr, sub)
-            part = min(self.console.cy, sub)
-            self.console.cy -= part
-            self.lnr -= sub - part
+            cursor_movement = min(self.console.cy, sub)
+            self.console.cy -= cursor_movement
+            self.lnr -= sub - cursor_movement
+            if cursor_movement == 0: #then view was moved, rewrap
+                self.rewrap()
 
         def DOWN(self, add=1):
             add = min(add, len(self.data) - self.console.cy - self.lnr - 1)
-            part = min(self.nolines - self.console.cy - 1, add)
-            self.console.cy += part
-            self.lnr += add - part
+            cursor_movement = min(self.nolines - self.console.cy - 1, add)
+            self.console.cy += cursor_movement
+            self.lnr += add - cursor_movement
+            if cursor_movement == 0:
+                self.rewrap()
 
         def PAGEUP(self): self.UP(self.nolines)
         def PAGEDOWN(self): self.DOWN(self.nolines)
