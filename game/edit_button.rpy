@@ -147,7 +147,9 @@ init -1500 python in _editor:
             self.nolines = 0
             tot = 0
             for line in self.data[self.lnr:min(self.lnr + self._maxlines, len(self.data))]:
-                wrap = textwrap.wrap(line, self.lineLenMax) or [''] # because textwrap.wrap('') returns []
+                wrap = textwrap.wrap(line, self.lineLenMax)
+                if len(wrap) == 0:
+                    wrap = textwrap.wrap(line, self.lineLenMax, drop_whitespace=False) or ['']
                 offs = 0
                 for l in wrap:
                     self.wrap2buf[tot]=(offs, self.nolines)
@@ -274,33 +276,40 @@ init -1500 python in _editor:
                 self.parse()
 
         def _ordered_cursor_coordinates(self):
-            sx, ex = self.console.cx, self.console.CX
-            sy, ey = (self.console.cy+self.lnr, self.console.CY+self.lnr)
+            cx, cy = self.console.cx, self.console.cy
+            CX, CY = self.console.CX, self.console.CY
+
             none_selected = 0
 
-            if sy > ey:
-                sy, ey = ey, sy
-                sx, ex = ex, sx
+            if cy > CY:
+                cy, CY = CY, cy
+                cx, CX = CX, cx
 
-            elif sy == ey:
-                if ex < sx:
-                    sx, ex = ex, sx
-                elif sx == ex:
+            elif cy == CY:
+                if cx > CX:
+                    cx, CX = CX, cx
+                elif cx == CX:
                     none_selected = 1
-            return (sx, ex, sy, ey, none_selected)
+            return (cx, cy, CX, CY, none_selected)
+
+        def _cursor2buf_coords(self, cx, CX, cy, CY):
+            sx, sy = self.wrap2buf[cy]
+            ex, ey = self.wrap2buf[CY]
+            return (sx+cx, sy+self.lnr, ex+CX, ey+self.lnr)
 
         def DELETE(self):
-            sx, ex, sy, ey, none_selected = self._ordered_cursor_coordinates()
+            cx, cy, CX, CY, none_selected = self._ordered_cursor_coordinates()
+            sx, sy, ex, ey = self._cursor2buf_coords(cx, CX, cy, CY)
 
-            if sx != len(self.line) or not none_selected:
-                ex += none_selected # then delete the one left to the cursor
+            if sx != len(self.data[sy]) or not none_selected:
+                ex += none_selected # then delete the one right of the cursor
                 start = self.data[sy][:sx]
                 while sy != ey:
                     del self.data[sy]
                     ey -= 1
                 self.data[sy] = start + self.data[sy][ex:]
-                self.console.cy = self.console.CY = sy - self.lnr
-                self.console.max = self.console.cx = self.console.CX = sx
+                self.console.cy = self.console.CY = cy
+                self.console.max = self.console.cx = self.console.CX = cx
             elif sy < self.nolines - 1:
                 self.console.max = len(self.data[sy])
                 self.data[sy] += self.data[sy+1]
@@ -309,7 +318,8 @@ init -1500 python in _editor:
 
         def copy(self):
             import pyperclip # to use external copy buffer
-            sx, ex, sy, ey, none_selected = self._ordered_cursor_coordinates()
+            cx, cy, CX, CY, none_selected = self._ordered_cursor_coordinates()
+            sx, sy, ex, ey = self._cursor2buf_coords(cx, CX, cy, CY)
             if not none_selected:
                 copy = ""
                 for y in xrange(sy, ey):
