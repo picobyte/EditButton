@@ -148,15 +148,16 @@ init -1500 python in _editor:
             tot = 0
             for line in self.data[self.lnr:min(self.lnr + self._maxlines, len(self.data))]:
                 wrap = textwrap.wrap(line, self.lineLenMax) or [''] # because textwrap.wrap('') returns []
-                offs = -1
+                offs = 0
                 for l in wrap:
-                    self.wrap2buf[tot]=offs
+                    self.wrap2buf[tot]=(offs, self.nolines)
                     tot += 1
                     if tot > self._maxlines:
                         return
                     offs += len(l)
-                    if offs == -1 or l[-1] != '-': # is there more? e.g. long words?
+                    if offs == 0 or l[-1] != '-': # is there more? e.g. long words?
                         offs += 1
+                offs -= 1
                 self.nolines += 1
                 self.wrapped_buffer.extend(wrap)
 
@@ -219,27 +220,28 @@ init -1500 python in _editor:
             self.copied = ""
 
         def LEFT(self, sub=1):
-            while self.console.cx < sub and self.wrap2buf[self.console.cy]:
+            while self.console.cx < sub and self.wrap2buf[self.console.cy][0]:
                 sub -= self.console.cx + 1
                 self.UP()
                 self.console.cx = len(self.line)
             self.console.max = max(self.console.cx - sub, 0)
         def RIGHT(self, add=1):
-            while self.console.cx + add > len(self.line) and self.wrap2buf[self.console.cy]:
+            bx, by = self.wrap2buf[self.console.cy]
+            while self.console.cx + add > len(self.line) and bx+self.console.cx < len(self.data[self.lnr+by]):
                 add -= len(self.line) - self.console.cx + 1
                 self.DOWN()
                 self.console.cx = 0
             self.console.max = min(self.console.cx + add, len(self.line))
 
         def ctrl_LEFT(self):
-            y = self.lnr+self.console.cy
-            m = re.compile(r'\w*\W*$').search(self.data[y][:self.console.cx])
+            bx, by = self.wrap2buf[self.console.cy]
+            m = re.compile(r'\w*\W*$').search(self.data[self.lnr+by][:bx+self.console.cx])
             if m:
                 self.LEFT(len(m.group(0)))
 
         def ctrl_RIGHT(self):
-            y = self.lnr+self.console.cy
-            m = re.compile(r'^\w*\W*').match(self.data[y][self.console.cx:])
+            bx, by = self.wrap2buf[self.console.cy]
+            m = re.compile(r'^\w*\W*').match(self.data[self.lnr+by][bx+self.console.cx:])
             if m:
                 self.RIGHT(len(m.group(0)))
 
@@ -257,8 +259,8 @@ init -1500 python in _editor:
         def BACKSPACE(self):
             cons = self.console
             if cons.cx != cons.CX or cons.cy != cons.CY:
-                return self.DELETE()
-            if cons.cx:
+                self.DELETE()
+            elif cons.cx:
                 self.LEFT()
                 cons.cx = min(cons.max, len(self.line))
                 self.DELETE()
@@ -269,7 +271,7 @@ init -1500 python in _editor:
                 self.data[y - 1] += self.data[y]
                 del self.data[y]
                 self.UP()
-            self.parse()
+                self.parse()
 
         def _ordered_cursor_coordinates(self):
             sx, ex = self.console.cx, self.console.CX
