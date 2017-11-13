@@ -109,7 +109,7 @@ init -1500 python in _editor:
             self._last_parsed_changes = None
 
         def parse(self):
-            """ If changes were not yet parsed, check for errors, and create the colored_buffer for view on screen """
+            """ If changes were not yet parsed, check for errors; create colored_buffer for view on screen """
             if self.history.at != self._last_parsed_changes:
                 document = os.linesep.join(self.data)
                 renpy.parser.parse_errors = []
@@ -117,7 +117,6 @@ init -1500 python in _editor:
                 escaped = re.sub(r'(?<!\{)(\{(\{\{)*)(?!\{)', r'{\1', re.sub(r'(?<!\[)(\[(\[\[)*)(?!\[)', r'[\1', document))
                 self.colored_buffer = highlight(escaped, self.lexer, self.formater).split(os.linesep)
                 self._last_parsed_changes = self.history.at
-            return (self.colored_buffer, renpy.parser.parse_errors)
 
     class TextView(object):
         """keeps track of horizontal position in text. Wrapping is not taken into account"""
@@ -127,7 +126,6 @@ init -1500 python in _editor:
             self.lnr = lnr if lnr else 0
             self.lineLenMax = 111
             self.show_errors = ""
-            self.wrapped_buffer = []
             self.keymap = set(['mousedown_4', 'mousedown_5'])
             # XXX default nolines should be relative to window + font size
             self._maxlines = nolines if nolines else int(config.screen_height / (34 + style.default.line_leading + style.default.line_spacing)) - 1
@@ -140,25 +138,33 @@ init -1500 python in _editor:
         def _add_km(self, km, mod): self.keymap.update([m+'K_'+k for k in km for m in mod])
 
         @property
-        def line(self): return self.data[self.lnr+self.console.cy]
+        def line(self): return self.wrapped_buffer[self.console.cy]
 
         def rewrap(self):
             """ a copy of the buffer in view that is wrapped as shown in view """
             self.wrapped_buffer = []
+            self.wrap2buf = {}
             self.nolines = 0
             tot = 0
             for line in self.data[self.lnr:min(self.lnr + self._maxlines, len(self.data))]:
                 wrap = textwrap.wrap(line, self.lineLenMax) or [''] # because textwrap.wrap('') returns []
-                tot += len(wrap)
-                if tot > self._maxlines:
-                    break
+                offs = -1
+                for l in wrap:
+                    self.wrap2buf[tot]=offs
+                    tot += 1
+                    if tot > self._maxlines:
+                        return
+                    offs += len(l)
+                    if offs == -1 or l[-1] != '-': # is there more? e.g. long words?
+                        offs += 1
                 self.nolines += 1
                 self.wrapped_buffer.extend(wrap)
 
         def parse(self):
-            (self.colored_data, err) = self.data.parse()
+            self.data.parse()
             self.rewrap()
             if self.show_errors is not None:
+                err = renpy.parser.parse_errors
                 self.show_errors = "\n{color=#f00}{size=-10}" + os.linesep.join(err) +"{/size}{/color}" if err else ""
 
         def UP(self, sub=1):
@@ -172,10 +178,14 @@ init -1500 python in _editor:
         def DOWN(self, add=1):
             add = min(add, len(self.data) - self.console.cy - self.lnr - 1)
             cursor_movement = min(self.nolines - self.console.cy - 1, add)
-            self.console.cy += cursor_movement
-            self.lnr += add - cursor_movement
-            if cursor_movement == 0:
+            if cursor_movement: # view movement
+                self.console.cy += cursor_movement
+            else:
+                self.lnr += add
                 self.rewrap()
+                while self.console.cy >= self.nolines:
+                    self.console.cy -= 1
+                    self.parse()
 
         def PAGEUP(self): self.UP(self.nolines)
         def PAGEDOWN(self): self.DOWN(self.nolines)
@@ -208,8 +218,18 @@ init -1500 python in _editor:
             self.oSymUpp = r'~_+{}|:"<>?'
             self.copied = ""
 
-        def LEFT(self, sub=1): self.console.max = max(self.console.cx - sub, 0)
-        def RIGHT(self, add=1): self.console.max = min(self.console.cx + add, len(self.line))
+        def LEFT(self, sub=1):
+            while self.console.cx < sub and self.wrap2buf[self.console.cy]:
+                sub -= self.console.cx + 1
+                self.UP()
+                self.console.cx = len(self.line)
+            self.console.max = max(self.console.cx - sub, 0)
+        def RIGHT(self, add=1):
+            while self.console.cx + add > len(self.line) and self.wrap2buf[self.console.cy]:
+                add -= len(self.line) - self.console.cx + 1
+                self.DOWN()
+                self.console.cx = 0
+            self.console.max = min(self.console.cx + add, len(self.line))
 
         def ctrl_LEFT(self):
             y = self.lnr+self.console.cy
@@ -335,7 +355,7 @@ init -1500 python in _editor:
 
         def display(self):
             ll = min(self.lnr + self.nolines, len(self.data))
-            return self.colorize(os.linesep.join(self.colored_data[self.lnr:ll]), self.lnr != 0, ll != len(self.data)) + (self.show_errors if self.show_errors else "")
+            return self.colorize(os.linesep.join(self.data.colored_buffer[self.lnr:ll]), self.lnr != 0, ll != len(self.data)) + (self.show_errors if self.show_errors else "")
 
         def _act_out(self, func, ndx, *args):
             """ handle undo/redo. Also makes sure the action remains in view """
@@ -374,24 +394,24 @@ init -1500 python in _editor:
             C = R.canvas()
             dx = width / 110
             dy = height / 31
-            color = (16,16,16,255)
+            selection = (16,16,16,255)
             if self.cy == self.CY:
                 if self.CX == self.cx:
                     C.line((255,255,255,255),(self.cx*dx,self.cy*dy),(self.cx*dx, (self.cy+0.95)*dy))
                 else:
-                    C.rect(color,(self.cx*dx, self.cy*dy, (self.CX-self.cx)*dx, 0.95*dy))
+                    C.rect(selection,(self.cx*dx, self.cy*dy, (self.CX-self.cx)*dx, 0.95*dy))
             elif self.cy < self.CY:
                 x = self.cx
                 for y in xrange(self.cy, self.CY):
-                    C.rect(color, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, 0.95*dy))
+                    C.rect(selection, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, 0.95*dy))
                     x = 0
-                C.rect(color, (0, self.CY*dy, self.CX*dx, 0.95*dy))
+                C.rect(selection, (0, self.CY*dy, self.CX*dx, 0.95*dy))
             else:
                 x = self.CX
                 for y in xrange(self.CY, self.cy):
-                    C.rect(color, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, 0.95*dy))
+                    C.rect(selection, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, 0.95*dy))
                     x = 0
-                C.rect(color, (0, self.cy*dy, self.cx*dx, 0.95*dy))
+                C.rect(selection, (0, self.cy*dy, self.cx*dx, 0.95*dy))
             return R
 
         def show_debug_messages(self, do_show):
@@ -404,6 +424,10 @@ init -1500 python in _editor:
 
             if self.view.lnr + cy >= len(self.view.data):
                 cy -= self.view.lnr + cy - len(self.view.data) + 1
+
+            # selection below displayes screen caused this. FIXME: maybe scroll down if this happens?
+            if cy >= len(self.view.wrapped_buffer):
+                cy = len(self.view.wrapped_buffer) - 1
             return (min(self.max, len(self.view.wrapped_buffer[cy])), cy)
 
         def event(self, ev, x, y, st):
