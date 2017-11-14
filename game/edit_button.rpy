@@ -147,19 +147,15 @@ init -1500 python in _editor:
             self.nolines = 0
             tot = 0
             for line in self.data[self.lnr:min(self.lnr + self._maxlines, len(self.data))]:
-                wrap = textwrap.wrap(line, self.lineLenMax)
-                if len(wrap) == 0:
-                    wrap = textwrap.wrap(line, self.lineLenMax, drop_whitespace=False) or ['']
+                wrap = renpy.text.extras.textwrap(line, self.lineLenMax) or ['']
                 offs = 0
                 for l in wrap:
+                    offs += line.index(l, offs) - offs
                     self.wrap2buf[tot]=(offs, self.nolines)
                     tot += 1
                     if tot > self._maxlines:
                         return
                     offs += len(l)
-                    if offs == 0 or l[-1] != '-': # is there more? e.g. long words?
-                        offs += 1
-                offs -= 1
                 self.nolines += 1
                 self.wrapped_buffer.extend(wrap)
 
