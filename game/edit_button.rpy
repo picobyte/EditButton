@@ -348,10 +348,25 @@ init -1500 python in _editor:
                 ey += 1
                 self.data.insert(ey, l)
             self.data[ey] += end
+            self.parse()
+            # Move cursor to end of insertion. This is tricky.
+            i = 0
+            cx += len(entries[-1])
+            while cy + 1 != self.nolines:
+                bx, by = self.wrap2buf[cy+1]
+                if i == len(entries) - 1 and (bx == 0 or bx >= len(entries[i])):
+                    if i == 0:
+                        cx -= self.wrap2buf[cy][0]
+                    elif cx == 0:
+                        cx = len(entries[i]) - self.wrap2buf[cy][0]
+                    break
+                cy += 1
+                if self.wrap2buf[cy][0] == 0:
+                    i += 1
+                    cx = 0
             self.console.cy = self.console.CY = cy
             self.console.max = self.console.cx = self.console.CX = cx
             renpy.redraw(self.console, 0)
-            self.parse()
 
         def handlekey(self, keystr):
             """ repeat keys are handled as normal keys; unless shift is provided selection is discarded and cursor is redrawn """
