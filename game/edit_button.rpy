@@ -352,18 +352,19 @@ init -1500 python in _editor:
             # Move cursor to end of insertion. This is tricky.
             i = 0
             cx += len(entries[-1])
-            while cy + 1 != self.nolines:
-                bx, by = self.wrap2buf[cy+1]
-                if i == len(entries) - 1 and (bx == 0 or bx >= len(entries[i])):
-                    if i == 0:
-                        cx -= self.wrap2buf[cy][0]
-                    elif cx == 0:
-                        cx = len(entries[i]) - self.wrap2buf[cy][0]
-                    break
-                cy += 1
-                if self.wrap2buf[cy][0] == 0:
-                    i += 1
-                    cx = 0
+            if len (entries) > 1:
+                while cy + 1 != self.nolines:
+                    bx, by = self.wrap2buf[cy+1]
+                    if i == len(entries) - 1 and (bx == 0 or bx >= len(entries[i])):
+                        if i == 0:
+                            cx -= self.wrap2buf[cy][0]
+                        elif cx == 0:
+                            cx = len(entries[i]) - self.wrap2buf[cy][0]
+                        break
+                    cy += 1
+                    if self.wrap2buf[cy][0] == 0:
+                        i += 1
+                        cx = 0
             self.console.cy = self.console.CY = cy
             self.console.max = self.console.cx = self.console.CX = cx
             renpy.redraw(self.console, 0)
