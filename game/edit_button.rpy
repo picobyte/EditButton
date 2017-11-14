@@ -292,14 +292,14 @@ init -1500 python in _editor:
                     none_selected = 1
             return (cx, cy, CX, CY, none_selected)
 
-        def _cursor2buf_coords(self, cx, CX, cy, CY):
+        def _cursor2buf_coords(self, cx, cy, CX, CY):
             sx, sy = self.wrap2buf[cy]
             ex, ey = self.wrap2buf[CY]
             return (sx+cx, sy+self.lnr, ex+CX, ey+self.lnr)
 
         def DELETE(self):
             cx, cy, CX, CY, none_selected = self._ordered_cursor_coordinates()
-            sx, sy, ex, ey = self._cursor2buf_coords(cx, CX, cy, CY)
+            sx, sy, ex, ey = self._cursor2buf_coords(cx, cy, CX, CY)
 
             if sx != len(self.data[sy]) or not none_selected:
                 ex += none_selected # then delete the one right of the cursor
@@ -319,7 +319,7 @@ init -1500 python in _editor:
         def copy(self):
             import pyperclip # to use external copy buffer
             cx, cy, CX, CY, none_selected = self._ordered_cursor_coordinates()
-            sx, sy, ex, ey = self._cursor2buf_coords(cx, CX, cy, CY)
+            sx, sy, ex, ey = self._cursor2buf_coords(cx, cy, CX, CY)
             if not none_selected:
                 copy = ""
                 for y in xrange(sy, ey):
@@ -336,21 +336,20 @@ init -1500 python in _editor:
             import pyperclip
             if entries == None: # is paste in absences of entries
                 entries = pyperclip.paste().split(os.linesep)
-            if self.console.CX != self.console.cx or self.console.CY != self.console.cy:
-                self.DELETE()
-            buf = self.data[self.lnr+self.console.cy]
-            end = buf[self.console.cx:]
-            self.data[self.lnr+self.console.cy] = buf[:self.console.cx] + entries[0]
-            ct = len(entries)
-            if ct > 1:
-                for i in xrange(1, ct):
-                    self.lnr += 1
-                    self.data.insert(self.lnr+self.console.cy, entries[i])
-                self.console.max = len(entries[ct-1])
-            else:
-                self.console.max += len(entries[0])
-            self.data[self.lnr+self.console.cy] += end
-            self.console.CX = self.console.cx = min(self.console.max, len(self.line))
+            cx, cy, CX, CY, none_selected = self._ordered_cursor_coordinates()
+            sx, sy, ex, ey = self._cursor2buf_coords(cx, cy, CX, CY)
+            start = self.data[sy][:sx]
+            end = self.data[ey][ex:]
+            while sy != ey:
+                del self.data[sy+1]
+                ey -= 1
+            self.data[sy] = start + entries[0]
+            for l in entries[1:]:
+                ey += 1
+                self.data.insert(ey, l)
+            self.data[ey] += end
+            self.console.cy = self.console.CY = cy
+            self.console.max = self.console.cx = self.console.CX = cx
             renpy.redraw(self.console, 0)
             self.parse()
 
