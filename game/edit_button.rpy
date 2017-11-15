@@ -129,7 +129,6 @@ init -1500 python in _editor:
             self.keymap = set(['mousedown_4', 'mousedown_5'])
             # XXX default nolines should be relative to window + font size
             self._maxlines = nolines if nolines else int(config.screen_height / (34 + style.default.line_leading + style.default.line_spacing)) - 1
-            self.nolines = self._maxlines
             self.parse()
             self._add_km(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['repeat_', ''])
             self._add_km(['HOME', 'END'], ['ctrl_'])
@@ -139,12 +138,14 @@ init -1500 python in _editor:
 
         @property
         def line(self): return self.wrapped_buffer[self.console.cy]
+        @property
+        def nolines(self):
+            return len(self.wrapped_buffer)
 
         def rewrap(self):
             """ a copy of the buffer in view that is wrapped as shown in view """
             self.wrapped_buffer = []
             self.wrap2buf = {}
-            self.nolines = 0
             tot = 0
             for line in self.data[self.lnr:min(self.lnr + self._maxlines, len(self.data))]:
                 wrap = renpy.text.extras.textwrap(line, self.lineLenMax) or ['']
@@ -156,7 +157,6 @@ init -1500 python in _editor:
                     if tot > self._maxlines:
                         return
                     offs += len(l)
-                self.nolines += 1
                 self.wrapped_buffer.extend(wrap)
 
         def parse(self):
@@ -445,12 +445,9 @@ init -1500 python in _editor:
             self.max = int(x * 113.3 / config.screen_width)
             cy = int(y * 31.5 / config.screen_height)
 
-            if self.view.lnr + cy >= len(self.view.data):
-                cy -= self.view.lnr + cy - len(self.view.data) + 1
-
             # selection below displayes screen caused this. FIXME: maybe scroll down if this happens?
-            if cy >= len(self.view.wrapped_buffer):
-                cy = len(self.view.wrapped_buffer) - 1
+            if cy >= self.view.nolines:
+                cy = self.view.nolines - 1
             return (min(self.max, len(self.view.wrapped_buffer[cy])), cy)
 
         def event(self, ev, x, y, st):
