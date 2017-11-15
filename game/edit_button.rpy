@@ -146,17 +146,19 @@ init -1500 python in _editor:
             """ a copy of the buffer in view that is wrapped as shown in view """
             self.wrapped_buffer = []
             self.wrap2buf = {}
+            atline = 0
             tot = 0
             for line in self.data[self.lnr:min(self.lnr + self._maxlines, len(self.data))]:
                 wrap = renpy.text.extras.textwrap(line, self.lineLenMax) or ['']
                 offs = 0
                 for l in wrap:
                     offs += line.index(l, offs) - offs
-                    self.wrap2buf[tot]=(offs, self.nolines)
+                    self.wrap2buf[tot]=(offs, atline)
                     tot += 1
                     if tot > self._maxlines:
                         return
                     offs += len(l)
+                atline += 1
                 self.wrapped_buffer.extend(wrap)
 
         def parse(self):
