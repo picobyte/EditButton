@@ -246,13 +246,7 @@ init -1500 python in _editor:
         def HOME(self): self.console.max = 0
         def END(self): self.console.max = 0xffff
 
-        def RETURN(self):
-            y = self.lnr+self.console.cy
-            self.data.insert(y+1, self.data[y][self.console.cx:])
-            self.data[y] = self.data[y][:self.console.cx]
-            self.parse()
-            self.console.max = 0
-            self.DOWN()
+        def RETURN(self): self.insert(['',''])
 
         def BACKSPACE(self):
             cons = self.console
