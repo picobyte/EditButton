@@ -12,6 +12,7 @@ init -1500 python in _editor:
     import re
     import codecs
     import textwrap
+    import time
 
     import math
 
@@ -404,6 +405,7 @@ init -1500 python in _editor:
             self.fl = {}
             self.fname = None
             self.view = None
+            self.timer = time.time()
             self.is_mouse_pressed = False
             self.exit() # sets is_visible and cursor coords to default
 
@@ -450,7 +452,17 @@ init -1500 python in _editor:
             import pygame
             if ev.type == pygame.MOUSEBUTTONDOWN:
                 self.cx, self.cy = self._screen_to_cursor_coordinates(x, y)
-                self.CX, self.CY = self.cx, self.cy
+                if time.time() - self.timer < 0.5:
+                    bx, by = self.view.wrap2buf[self.cy]
+                    m = re.compile(r'\w*$').search(self.view.data[self.view.lnr+by][:bx+self.cx])
+                    if m:
+                        self.cx -= len(m.group(0))
+                    m = re.compile(r'^\w*').match(self.view.data[self.view.lnr+by][bx+self.cx:])
+                    if m:
+                        self.max = self.CX = min(self.cx+len(m.group(0)), len(self.view.line))
+                else:
+                    self.timer = time.time()
+                    self.CX, self.CY = self.cx, self.cy
                 renpy.redraw(self, 0)
                 self.is_mouse_pressed = True
             if self.is_mouse_pressed and (ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP):
