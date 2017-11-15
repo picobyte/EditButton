@@ -349,7 +349,7 @@ init -1500 python in _editor:
             i = 0
             cx += len(entries[-1])
             if len (entries) > 1:
-                while cy + 1 != self.nolines:
+                while cy + 1 < self.nolines:
                     bx, by = self.wrap2buf[cy+1]
                     if i == len(entries) - 1 and (bx == 0 or bx >= len(entries[i])):
                         if i == 0:
@@ -361,7 +361,7 @@ init -1500 python in _editor:
                     if self.wrap2buf[cy][0] == 0:
                         i += 1
                         cx = 0
-            self.console.cy = self.console.CY = cy
+            self.console.cy = self.console.CY = max(cy, self.nolines-1)
             self.console.max = self.console.cx = self.console.CX = cx
             renpy.redraw(self.console, 0)
 
