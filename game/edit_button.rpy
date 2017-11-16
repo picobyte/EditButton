@@ -256,8 +256,7 @@ init -1500 python in _editor:
             if cons.cx != cons.CX or cons.cy != cons.CY:
                 self.DELETE()
             else:
-                bx, by = self.wrap2buf[cons.cy]
-                if bx:
+                if cons.cx or self.wrap2buf[cons.cy][0]:
                     self.LEFT()
                     cons.cx = cons.max
                     self.DELETE()
