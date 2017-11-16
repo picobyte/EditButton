@@ -253,20 +253,16 @@ init -1500 python in _editor:
 
         def BACKSPACE(self):
             cons = self.console
-            if cons.cx != cons.CX or cons.cy != cons.CY:
-                self.DELETE()
-            else:
+            if cons.cx == cons.CX and cons.cy == cons.CY:
                 if cons.cx or self.wrap2buf[cons.cy][0]:
                     self.LEFT()
-                    cons.cx = cons.max
-                    self.DELETE()
                 elif self.lnr + cons.cy != 0:
-                    y = self.lnr+cons.cy
-                    cons.max = len(self.data[y - 1])
-                    self.data[y - 1] += self.data[y]
-                    del self.data[y]
                     self.UP()
-                self.parse()
+                    cons.max = len(self.line)
+                else:
+                    return
+                cons.cx = cons.max
+            self.DELETE()
 
         def _ordered_cursor_coordinates(self):
             cx, cy = self.console.cx, self.console.cy
