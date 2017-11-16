@@ -302,7 +302,11 @@ init -1500 python in _editor:
                     del self.data[sy]
                     ey -= 1
                 self.data[sy] = start + self.data[sy][ex:]
+                self.rewrap()
                 self.console.cy = self.console.CY = cy
+                if cx >= len(self.line):
+                    cx -= len(self.line) + 1
+                    self.DOWN()
                 self.console.max = self.console.cx = self.console.CX = cx
             elif sy < self.nolines - 1:
                 self.console.max = len(self.data[sy])
