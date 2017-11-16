@@ -302,17 +302,21 @@ init -1500 python in _editor:
                     del self.data[sy]
                     ey -= 1
                 self.data[sy] = start + self.data[sy][ex:]
-                self.rewrap()
+                self.parse()
                 self.console.cy = self.console.CY = cy
                 if cx >= len(self.line):
                     cx -= len(self.line) + 1
                     self.DOWN()
+                elif sx < self.wrap2buf[cy][0]:
+                    dx = self.wrap2buf[cy][0] - sx
+                    self.UP()
+                    cx = len(self.line) + 1 - dx
                 self.console.max = self.console.cx = self.console.CX = cx
             elif sy < self.nolines - 1:
                 self.console.max = len(self.data[sy])
                 self.data[sy] += self.data[sy+1]
                 del self.data[sy+1]
-            self.parse()
+                self.parse()
 
         def copy(self):
             import pyperclip # to use external copy buffer
