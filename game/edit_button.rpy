@@ -267,7 +267,7 @@ init -1500 python in _editor:
                     self.data[y - 1] += self.data[y]
                     del self.data[y]
                     self.UP()
-                    self.parse()
+                self.parse()
 
         def _ordered_cursor_coordinates(self):
             cx, cy = self.console.cx, self.console.cy
@@ -304,7 +304,7 @@ init -1500 python in _editor:
                 self.data[sy] = start + self.data[sy][ex:]
                 self.parse()
                 self.console.cy = self.console.CY = cy
-                if cx >= len(self.line):
+                if cx > len(self.line):
                     cx -= len(self.line) + 1
                     self.DOWN()
                 elif sx < self.wrap2buf[cy][0]:
@@ -312,7 +312,7 @@ init -1500 python in _editor:
                     self.UP()
                     cx = len(self.line) + 1 - dx
                 self.console.max = self.console.cx = self.console.CX = cx
-            elif sy < self.nolines - 1:
+            elif sy < len(self.data) - 1:
                 self.console.max = len(self.data[sy])
                 self.data[sy] += self.data[sy+1]
                 del self.data[sy+1]
