@@ -297,21 +297,22 @@ init -1500 python in _editor:
                     del self.data[sy]
                     ey -= 1
                 self.data[sy] = start + self.data[sy][ex:]
-                self.parse()
-                self.console.cy = self.console.CY = cy
-                if cx > len(self.line):
-                    cx -= len(self.line) + 1
-                    self.DOWN()
-                elif sx < self.wrap2buf[cy][0]:
-                    dx = self.wrap2buf[cy][0] - sx
-                    self.UP()
-                    cx = len(self.line) + 1 - dx
-                self.console.max = self.console.cx = self.console.CX = cx
             elif sy < len(self.data) - 1:
                 self.console.max = len(self.data[sy])
                 self.data[sy] += self.data[sy+1]
                 del self.data[sy+1]
-                self.parse()
+            self.parse()
+            self.console.cy = self.console.CY = cy
+            if cx > len(self.line):
+                # fix cursor placement if space was deleted causing a word at the end of the line to wrap to the next line
+                cx -= len(self.line) + 1
+                self.DOWN()
+            elif sx < self.wrap2buf[cy][0]:
+                # fix cursor placement when word at start of line was shortened and now wraps
+                dx = self.wrap2buf[cy][0] - sx
+                self.UP()
+                cx = len(self.line) + 1 - dx
+            self.console.max = self.console.cx = self.console.CX = cx
 
         def copy(self):
             import pyperclip # to use external copy buffer
