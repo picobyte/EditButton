@@ -255,18 +255,19 @@ init -1500 python in _editor:
             cons = self.console
             if cons.cx != cons.CX or cons.cy != cons.CY:
                 self.DELETE()
-            elif cons.cx:
-                self.LEFT()
-                cons.cx = min(cons.max, len(self.line))
-                self.DELETE()
-                cons.max += cons.CX - cons.cx
-            elif self.lnr + cons.cy != 0:
-                y = self.lnr+cons.cy
-                cons.max = len(self.data[y - 1])
-                self.data[y - 1] += self.data[y]
-                del self.data[y]
-                self.UP()
-                self.parse()
+            else:
+                bx, by = self.wrap2buf[cons.cy]
+                if bx:
+                    self.LEFT()
+                    cons.cx = cons.max
+                    self.DELETE()
+                elif self.lnr + cons.cy != 0:
+                    y = self.lnr+cons.cy
+                    cons.max = len(self.data[y - 1])
+                    self.data[y - 1] += self.data[y]
+                    del self.data[y]
+                    self.UP()
+                    self.parse()
 
         def _ordered_cursor_coordinates(self):
             cx, cy = self.console.cx, self.console.cy
