@@ -10,21 +10,23 @@ define e = Character('Eileen')
 
 label cancel:
 
-    "With 'Cancel' you discard changes. That's one way to get rid of the syntax error."
+    "With 'Cancel' you discard changes. That's one way to get rid of a syntax error."
 
-    "'Visual' returns you to the visual modus, any changes are merely kept in store."
+    "'Visual' in the editor returns you to the visual modus, any changes are in that case only kept in store."
 
-    "If you want to write changes, 'Apply' writes the edits to the .rpy file on disk."
+    "If you want to write changes, 'Apply' writes the edits to the .rpy file on disk. Make sure that you're not working on this .rpy file in an external editor as well."
 
-    "You won't notice the changes until you reload the game, however, which can be triggered with shift+R."
+    "Now return to the editor modus. When you've returned from the visual modus, press shift+R to see the change you made in the next dialogue."
 
-    "It may happen that reload won't work, in which case you'll lose your progress in visual modus."
+    # Now let's replace the text in the narration below here:
 
-    "The editor has some more quirks, and lacks some features, but is IMhO already somewhat useful."
+    "Replace this text."
 
-    "End of file."
+    # You can use the mouse for selection and some common keyboard shortcuts are available.
 
-    return
+    # Apply the change (write the change to disk) and you will return to visual modus.
+
+    jump applied
 
 label start:
 
@@ -44,7 +46,9 @@ label start:
     "This visual novel has a built-in editor. Note the buttons below. Press the Edit button to continue."
 
     # Now you've entered the edit modus. In here you can make changes to your Ren'py script.
-    # For instance, try adding dots to this line...
+    # You can move the cursor by mouse or keyboard arrows.
+
+    # For instance, try adding dots to this line..
 
     # ..and you may notice that now 3 buttons are shown at the bottom of the editor:
 
@@ -57,3 +61,23 @@ label start:
     # Now press Cancel, and continue the visual novel to the next line..
 
     jump cancel
+
+
+
+
+
+
+
+
+
+
+
+label applied:
+
+    "It may happen that reload is triggered automaticly, and it can also cause the visual novel to restart."
+
+    "The editor has some more quirks, and probably lacks some features, but is IMhO already somewhat useful."
+
+    "End of file."
+
+    return
