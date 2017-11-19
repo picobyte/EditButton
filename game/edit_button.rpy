@@ -19,7 +19,6 @@ init -1500 python in _editor:
     from pygments import highlight
     from renpy_lexer import RenPyLexer
     from renpyformatter import RenPyFormatter
-    from pygments.styles import get_style_by_name
 
     class History(object):
         def __init__(self): self.reset()
@@ -116,7 +115,9 @@ init -1500 python in _editor:
                 renpy.parser.parse_errors = []
                 renpy.parser.parse(self.fname, document)
                 escaped = re.sub(r'(?<!\{)(\{(\{\{)*)(?!\{)', r'{\1', re.sub(r'(?<!\[)(\[(\[\[)*)(?!\[)', r'[\1', document))
-                self.colored_buffer = highlight(escaped, self.lexer, self.formater).split(os.linesep)
+
+                # NOTE: must split on newline here, not os.linesep, or it won't work in windows
+                self.colored_buffer = highlight(escaped, self.lexer, self.formater).split('\n')
                 self._last_parsed_changes = self.history.at
 
     class TextView(object):
@@ -167,7 +168,7 @@ init -1500 python in _editor:
             self.rewrap()
             if self.show_errors is not None:
                 err = renpy.parser.parse_errors
-                self.show_errors = "\n{color=#f00}{size=-10}" + os.linesep.join(err) +"{/size}{/color}" if err else ""
+                self.show_errors = os.linesep+"{color=#f00}{size=-10}" + os.linesep.join(err) +"{/size}{/color}" if err else ""
 
         def UP(self, sub=1):
             sub = min(self.console.cy + self.lnr, sub)
