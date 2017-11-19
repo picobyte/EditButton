@@ -179,11 +179,11 @@ init -1500 python in _editor:
                 self.rewrap()
 
         def DOWN(self, add=1):
-            add = min(add, len(self.data) - self.console.cy - self.lnr - 1)
             cursor_movement = min(self.nolines - self.console.cy - 1, add)
-            if cursor_movement: # view movement
+            add -= cursor_movement
+            if cursor_movement:
                 self.console.cy += cursor_movement
-            else:
+            elif self.console.cy > add: # view movement
                 self.lnr += add
                 self.rewrap()
                 while self.console.cy >= self.nolines:
