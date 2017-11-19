@@ -332,39 +332,43 @@ init -1500 python in _editor:
 
         def insert(self, entries=None):
             import pyperclip
-            if entries == None: # is paste in absences of entries
+
+            if entries == None: # paste in absences of entries
                 entries = pyperclip.paste().split(os.linesep)
+
             cx, cy, CX, CY, none_selected = self._ordered_cursor_coordinates()
-            sx, sy, ex, ey = self._cursor2buf_coords(cx, cy, CX, CY)
-            start = self.data[sy][:sx]
-            end = self.data[ey][ex:]
-            while sy != ey:
-                del self.data[sy+1]
-                ey -= 1
-            self.data[sy] = start + entries[0]
+
+            if cx != CX or cy != CY:
+                self.DELETE()
+
+            cx, cy = self.console.cx, self.console.cy
+
+            offs, atline = self.wrap2buf[cy]
+            cx += offs
+            by = atline + self.lnr
+
+            end = self.data[by][cx:]
+            self.data[by] = self.data[by][:cx] + entries[0]
             for l in entries[1:]:
-                ey += 1
-                self.data.insert(ey, l)
-            self.data[ey] += end
+                by += 1
+                self.data.insert(by, l)
+            self.data[by] += end
             self.parse()
-            # Move cursor to end of insertion. This is tricky.
-            i = 0
-            cx += len(entries[-1])
-            if len (entries) > 1:
-                while cy + 1 < self.nolines:
-                    bx, by = self.wrap2buf[cy+1]
-                    if i == len(entries) - 1 and (bx == 0 or bx >= len(entries[i])):
-                        if i == 0:
-                            cx -= self.wrap2buf[cy][0]
-                        elif cx == 0:
-                            cx = len(entries[i]) - self.wrap2buf[cy][0]
+
+            # move cursor
+            self.UP()
+            for e in entries:
+                self.DOWN()
+                self.console.cx = cx + len(e)
+                while self.console.cx - self.wrap2buf[self.console.cy][0] > len(self.line):
+                    self.DOWN()
+                    if not self.wrap2buf[self.console.cy][0]:
                         break
-                    cy += 1
-                    if self.wrap2buf[cy][0] == 0:
-                        i += 1
-                        cx = 0
-            self.console.cy = self.console.CY = min(cy, self.nolines-1)
-            self.console.max = self.console.cx = self.console.CX = cx
+                cx = 0
+
+            self.console.cx -= self.wrap2buf[self.console.cy][0]
+            self.console.max = self.console.CX = self.console.cx
+            self.console.CY = self.console.cy
             renpy.redraw(self.console, 0)
 
         def handlekey(self, keystr):
