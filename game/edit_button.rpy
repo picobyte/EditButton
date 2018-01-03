@@ -168,7 +168,10 @@ init -1500 python in _editor:
             self.rewrap()
             if self.show_errors is not None:
                 err = renpy.parser.parse_errors
-                self.show_errors = os.linesep+"{color=#f00}{size=-10}" + os.linesep.join(err) +"{/size}{/color}" if err else ""
+                self.show_errors = ""
+                if err:
+                    escaped = re.sub(r'(?<!\{)(\{(\{\{)*)(?!\{)', r'{\1', re.sub(r'(?<!\[)(\[(\[\[)*)(?!\[)', r'[\1', os.linesep.join(err)))
+                    self.show_errors = os.linesep+"{color=#f00}{size=-10}" + escaped +"{/size}{/color}"
 
         def UP(self, sub=1):
             sub = min(self.console.cy + self.lnr, sub)
