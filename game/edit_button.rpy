@@ -362,19 +362,22 @@ init -1500 python in _editor:
             self.parse()
 
             # move cursor
-            self.UP()
-            for e in entries:
-                self.DOWN()
-                self.console.cx = cx + len(e)
-                while self.console.cx - self.wrap2buf[self.console.cy][0] > len(self.line):
+            if len(entries) <= 1 and cx + len(entries[0]) - self.wrap2buf[self.console.cy][0] < len(self.line): 
+                self.console.cx = cx + len(entries[0])
+            else:
+                self.UP()
+                for e in entries:
                     self.DOWN()
-                    if not self.wrap2buf[self.console.cy][0]:
-                        break
-                cx = 0
+                    self.console.cx = cx + len(e)
+                    while self.console.cx - self.wrap2buf[self.console.cy][0] > len(self.line):
+                        self.DOWN()
+                        if not self.wrap2buf[self.console.cy][0]:
+                            break
+                    cx = 0
+                self.console.CY = self.console.cy
 
             self.console.cx -= self.wrap2buf[self.console.cy][0]
             self.console.max = self.console.CX = self.console.cx
-            self.console.CY = self.console.cy
             renpy.redraw(self.console, 0)
 
         def handlekey(self, keystr):
