@@ -157,11 +157,11 @@ init -1500 python in _editor:
                     offs += line.index(l, offs) - offs
                     self.wrap2buf[tot]=(offs, atline)
                     tot += 1
-                    if tot > self._maxlines:
+                    if tot >= self._maxlines - 1:
                         return
                     offs += len(l)
+                    self.wrapped_buffer.append(l)
                 atline += 1
-                self.wrapped_buffer.extend(wrap)
 
         def parse(self):
             self.data.parse()
