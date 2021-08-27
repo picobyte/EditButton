@@ -434,26 +434,28 @@ init -1500 python in _editor:
             """ draw the cursor or the selection """
             R = renpy.Render(width, height)
             C = R.canvas()
+            a = 0.96
+            b = 3
             dx = width / 110
             dy = height / 29
             selection = (16,16,16,255)
             if self.cy == self.CY:
                 if self.CX == self.cx:
-                    C.line((255,255,255,255),(self.cx*dx,self.cy*dy),(self.cx*dx, (self.cy+0.95)*dy))
+                    C.line((255,255,255,255),(self.cx*dx,self.cy*dy),(self.cx*dx, (self.cy+a)*dy + b))
                 else:
-                    C.rect(selection,(self.cx*dx, self.cy*dy, (self.CX-self.cx)*dx, 0.95*dy))
+                    C.rect(selection,(self.cx*dx, self.cy*dy, (self.CX-self.cx)*dx, a*dy + b))
             elif self.cy < self.CY:
                 x = self.cx
                 for y in xrange(self.cy, self.CY):
-                    C.rect(selection, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, 0.95*dy))
+                    C.rect(selection, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, a*dy + b))
                     x = 0
-                C.rect(selection, (0, self.CY*dy, self.CX*dx, 0.95*dy))
+                C.rect(selection, (0, self.CY*dy, self.CX*dx, a*dy + b))
             else:
                 x = self.CX
                 for y in xrange(self.CY, self.cy):
-                    C.rect(selection, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, 0.95*dy))
+                    C.rect(selection, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, a*dy + b))
                     x = 0
-                C.rect(selection, (0, self.cy*dy, self.cx*dx, 0.95*dy))
+                C.rect(selection, (0, self.cy*dy, self.cx*dx, a*dy + b))
             return R
 
         def show_debug_messages(self, do_show):
@@ -471,8 +473,10 @@ init -1500 python in _editor:
 
         def event(self, ev, x, y, st):
             import pygame
+            a = 0.96
+            b = 7
             if ev.type == pygame.MOUSEBUTTONDOWN:
-                self.cx, self.cy = self._screen_to_cursor_coordinates(x, y)
+                self.cx, self.cy = self._screen_to_cursor_coordinates(x, y * a - b)
                 if time.time() - self.timer < 0.5:
                     bx, by = self.view.wrap2buf[self.cy]
                     m = re.compile(r'\w*$').search(self.view.data[self.view.lnr+by][:bx+self.cx])
@@ -488,7 +492,7 @@ init -1500 python in _editor:
                 self.is_mouse_pressed = True
             if self.is_mouse_pressed and (ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP):
                 if ev.type == pygame.MOUSEMOTION:
-                    self.CX, self.CY = self._screen_to_cursor_coordinates(x, y)
+                    self.CX, self.CY = self._screen_to_cursor_coordinates(x, y * a - b)
                 renpy.redraw(self, 0)
                 if ev.type == pygame.MOUSEBUTTONUP:
                     self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
