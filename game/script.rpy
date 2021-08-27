@@ -1,5 +1,5 @@
 ## The script of the game goes in this file.
-
+#
 ## Declare characters used by this game. The color argument colorizes the name
 ## of the character.
 
@@ -12,11 +12,11 @@ label cancel:
 
     "With 'Cancel' you discard changes. That's one way to get rid of a syntax error."
 
-    "'Visual' in the editor returns you to the visual modus, any changes are in that case only kept in store."
+    "'Visual' in the editor returns you to the visual modus, any changes are in that case only kept in memory, lost unless you apply the changes in editor modus."
 
-    "If you want to write changes, 'Apply' writes the edits to the .rpy file on disk. Make sure that you're not working on this .rpy file in an external editor as well."
+    "Applied changes are written to the .rpy file on disk. Make sure that you're not working on this .rpy file in an external editor as well."
 
-    "Now return to the editor modus. When you've returned from the visual modus, press shift+R to see the change you made in the next dialogue."
+    "Now return to the editor modus. When you've returned from the visual modus, reload (shift+R) to see the changes you made in the next dialogue."
 
     # Now let's replace the text in the narration below here:
 
@@ -43,7 +43,7 @@ label start:
 
     ## These display lines of dialogue.
 
-    "This visual novel has a built-in editor. Note the buttons below. Press the Edit button to continue."
+    "This visual novel has a built-in editor. Note the Edit button in the buttons below. Press it to try it out."
 
     # Now you've entered the edit modus. In here you can make changes to your Ren'py script.
     # You can move the cursor by mouse or keyboard arrows.
@@ -56,7 +56,7 @@ label start:
 
     # But, if you add something random on the non-comment line below here..
 
-    # ..you will see a debug warning and 'Silence' or 'Debug' instead of the Apply button.
+    # ..you will see a debug warning and 'Hide' or 'Debug' instead of the Apply button.
 
     # Now press Cancel, and continue the visual novel to the next line..
 
@@ -76,8 +76,11 @@ label applied:
 
     "It may happen that reload is triggered automaticly, and it can also cause the visual novel to restart."
 
-    "The editor has some more quirks, and probably lacks some features, but is IMhO already somewhat useful."
+    "The editor has some more quirks, and probably lacks some features, but is IMhO already a bit useful. let's go back to the editor."
 
+    # something goes wrong when scrolling near long lines
+
+    # All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. 
     "End of file."
 
     return

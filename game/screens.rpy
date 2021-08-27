@@ -13,6 +13,20 @@ style default:
     size gui.text_size
     color gui.text_color
 
+style editor:
+    font "Inconsolata-Regular.ttf"
+    size gui.text_size
+    color gui.text_color
+
+style error:
+    font "Inconsolata-Regular.ttf"
+    size gui.text_size - 10
+    color "#f00"
+    xalign 0.50
+    yalign 0.70
+    background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
+    padding gui.namebox_borders.padding
+
 style input:
     color gui.accent_color
 

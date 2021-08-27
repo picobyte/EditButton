@@ -122,9 +122,9 @@ init -1500 python in _editor:
     class TextView(object):
         """keeps track of horizontal position in text. Wrapping is not taken into account"""
         wheel_scroll_lines = 3
-        def __init__(self, console, data, nolines=None, lnr=None, wheel_scroll_lines=None):
+        def __init__(self, console, data, nolines=None, lnr=0, wheel_scroll_lines=None):
             self.data = data
-            self.lnr = lnr if lnr else 0
+            self.lnr = lnr
             self.lineLenMax = 111
             self.show_errors = ""
             self.keymap = set(['mousedown_4', 'mousedown_5'])
@@ -173,8 +173,7 @@ init -1500 python in _editor:
                 err = renpy.parser.parse_errors
                 self.show_errors = ""
                 if err:
-                    escaped = re.sub(r'(?<!\{)(\{(\{\{)*)(?!\{)', r'{\1', re.sub(r'(?<!\[)(\[(\[\[)*)(?!\[)', r'[\1', os.linesep.join(err)))
-                    self.show_errors = os.linesep+"{color=#f00}{size=-10}" + escaped +"{/size}{/color}"
+                    self.show_errors = re.sub(r'(?<!\{)(\{(\{\{)*)(?!\{)', r'{\1', re.sub(r'(?<!\[)(\[(\[\[)*)(?!\[)', r'[\1', os.linesep.join(err)))
 
         def UP(self, sub=1):
             sub = min(self.console.cy + self.lnr, sub)
@@ -396,7 +395,7 @@ init -1500 python in _editor:
 
         def display(self):
             ll = min(self.lnr + self.cbuflines, len(self.data))
-            return self.colorize(os.linesep.join(self.data.colored_buffer[self.lnr:ll]), self.lnr != 0, ll != len(self.data)) + (self.show_errors if self.show_errors else "")
+            return self.colorize(os.linesep.join(self.data.colored_buffer[self.lnr:ll]), self.lnr != 0, ll != len(self.data))
 
         def _act_out(self, func, ndx, *args):
             """ handle undo/redo. Also makes sure the action remains in view """
@@ -544,6 +543,9 @@ screen editor:
 
         add editor
         text view.display() style "editor"
+        if view.show_errors:
+            window:
+                text view.show_errors style "error"
 
         for keystr in sorted(view.keymap, key=len):
             key keystr action Function(view.handlekey, keystr)
@@ -603,6 +605,6 @@ screen editor:
                 elif view.show_errors is None:
                     textbutton _("Debug") action Function(editor.show_debug_messages, True)
                 else:
-                    textbutton _("Silence") action Function(editor.show_debug_messages, False)
+                    textbutton _("Hide") action Function(editor.show_debug_messages, False)
                 textbutton _("Cancel") action [Function(editor.exit, discard = True), Return()]
             textbutton _("Visual") action [Function(editor.exit), Return()]
