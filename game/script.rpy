@@ -10,19 +10,19 @@ define e = Character('Eileen')
 
 label cancel:
 
-    "With 'Cancel' you discard changes. That's one way to get rid of a syntax error."
+    "With 'Cancel' you discard changes. That's just fleeing from syntax errors and also benign changes are lost."
 
-    "'Visual' in the editor returns you to the visual modus, any changes are in that case only kept in memory, lost unless you apply the changes in editor modus."
+    "'Visual' in the editor returns you to visual modus, and changes are kept in memory, but lost after a reload or something similar. In general it is safest to apply changes."
 
-    "Applied changes are written to the .rpy file on disk. Make sure that you're not working on this .rpy file in an external editor as well."
+    "Applied changes are written to the .rpy file on disk. Make sure that you're not working on this .rpy file in another editor. It's advisable to have backups or work with version control."
 
-    "Now return to the editor modus. When you've returned from the visual modus, reload (shift+R) to see the changes you made in the next dialogue."
+    "Now return to the editor modus."
 
     # Now let's replace the text in the narration below here:
 
     "Replace this text."
 
-    # You can use the mouse for selection and some common keyboard shortcuts are available.
+    # You can use the mouse or shift arrow movement for selection and some common keyboard shortcuts are available.
 
     # Apply the change (write the change to disk) and you will return to visual modus.
 
@@ -43,20 +43,19 @@ label start:
 
     ## These display lines of dialogue.
 
-    "This visual novel has a built-in editor. Note the Edit button in the buttons below. Press it to try it out."
+    "This visual novel has a built-in editor. Note the Edit button below. Press it to try it out."
 
-    # Now you've entered the edit modus. In here you can make changes to your Ren'py script.
-    # You can move the cursor by mouse or keyboard arrows.
+    # Now yo,u've entered the edit modus. In here you can make edit your Ren'py script. With the visual
+    # button, below, you can return to where you were in the visual novel, but let's stay in editor
+    # modus for a bit.
 
-    # For instance, try adding dots to this line..
+    # Move the cursor by mouse click or keyboard arrows. Then, for instance, try adding dots to this line..
 
-    # ..and you may notice that now 3 buttons are shown at the bottom of the editor:
+    # You may have noticed that now 3 buttons are shown at the bottom: Apply, Cancel and Visual.
 
-    # Apply, Cancel and Visual.
+    # However, if you add something that is not valid ren'py..
 
-    # But, if you add something random on the non-comment line below here..
-
-    # ..you will see a debug warning and 'Hide' or 'Debug' instead of the Apply button.
+    # ..you see a warning and 'Hide' is shown (or 'Debug' if the error is hidden), instead of Apply.
 
     # Now press Cancel, and continue the visual novel to the next line..
 
@@ -74,9 +73,11 @@ label start:
 
 label applied:
 
-    "It may happen that reload is triggered automaticly, and it can also cause the visual novel to restart."
+    "When you returned from the visual modus, you may have observed the reload. That is required so your applied change is shown in visual modus. A reload can also be triggered with shift+r."
 
-    "The editor has some more quirks, and probably lacks some features, but is IMhO already a bit useful. let's go back to the editor."
+    "Sometimes a change can cause the visual novel to restart. During development you can add jumps to fast forward dialogue."
+
+    "The editor has some more quirks, and lacks features, but should already be a bit useful. let's go back to the editor once more."
 
     # something goes wrong when scrolling near long lines
 
