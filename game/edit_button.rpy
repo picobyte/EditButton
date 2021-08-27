@@ -15,7 +15,6 @@ init -1500 python in _editor:
     import time
 
     import math
-
     from pygments import highlight
     from renpy_lexer import RenPyLexer
     from renpyformatter import RenPyFormatter
@@ -135,6 +134,7 @@ init -1500 python in _editor:
             self._add_km(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['repeat_', ''])
             self._add_km(['HOME', 'END'], ['ctrl_'])
             self.console = console
+            self.cbuflines = self._maxlines
 
         def _add_km(self, km, mod): self.keymap.update([m+'K_'+k for k in km for m in mod])
 
@@ -157,11 +157,14 @@ init -1500 python in _editor:
                     offs += line.index(l, offs) - offs
                     self.wrap2buf[tot]=(offs, atline)
                     tot += 1
-                    if tot >= self._maxlines - 1:
+                    if tot > self._maxlines:
                         return
                     offs += len(l)
                     self.wrapped_buffer.append(l)
                 atline += 1
+                self.cbuflines = atline
+                if offs != len(line):
+                    renpy.error(os.linesep.join(["rewrap() discrepancy", line, str(offs), str(len(line)), str(wrap)]))
 
         def parse(self):
             self.data.parse()
@@ -388,11 +391,11 @@ init -1500 python in _editor:
                 self.console.CX, self.console.CY = self.console.cx, self.console.cy
             renpy.redraw(self.console, 0)
 
-        def colorize(self, txt, at_start=False, at_end=False):
+        def colorize(self, txt, at_start, at_end):
             return ('{color=#000000}' if at_start else '') + txt + ('{/color}' if at_end else '')
 
         def display(self):
-            ll = min(self.lnr + self.nolines, len(self.data))
+            ll = min(self.lnr + self.cbuflines, len(self.data))
             return self.colorize(os.linesep.join(self.data.colored_buffer[self.lnr:ll]), self.lnr != 0, ll != len(self.data)) + (self.show_errors if self.show_errors else "")
 
         def _act_out(self, func, ndx, *args):
@@ -432,7 +435,7 @@ init -1500 python in _editor:
             R = renpy.Render(width, height)
             C = R.canvas()
             dx = width / 110
-            dy = height / 31
+            dy = height / 29
             selection = (16,16,16,255)
             if self.cy == self.CY:
                 if self.CX == self.cx:

@@ -2,7 +2,9 @@ This is a runtime Ren'Py editor. Do not use this in commercial only visual novel
 
 To get color support, you need to install the pygments module in your game directory.
 
-pip install --target ./game/python-packages pygments
+latest working version is 2.5.2, in a2d5f6b318d70d8d6a230cba46c8fc585efdaf1e python 2 support was removed.
+
+pip install --constraint <(echo "pygments == 2.5.2") --target ./game/python-packages pygments --upgrade
 pip install --target ./game/python-packages pyperclip
 
 And modify change game/python-packages/pygments/filters/__init__.py
