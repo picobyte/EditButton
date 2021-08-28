@@ -24,6 +24,13 @@ style error:
     color "#f00"
     xalign 0.50
     yalign 0.70
+    background Frame("gui/skip.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
+    #padding gui.namebox_borders.padding
+
+style search:
+    font "Inconsolata-Regular.ttf"
+    xalign 0.50
+    yalign 0.50
     background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
     padding gui.namebox_borders.padding
 
@@ -141,7 +148,6 @@ style say_thought is say_dialogue
 
 style namebox is default
 style namebox_label is say_label
-
 
 style window:
     xalign 0.5

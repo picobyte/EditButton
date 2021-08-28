@@ -227,6 +227,10 @@ init -1500 python in _editor:
             self.oSymLow = r"`-=[]\;',./"
             self.oSymUpp = r'~_+{}|:"<>?'
             self.copied = ""
+            self.show_search = False
+            self.search_string = ""
+            self.find_upstream = None
+            self.find_downstream = None
 
         def LEFT(self, sub=1):
             while self.console.cx < sub and self.wrap2buf[self.console.cy][0]:
@@ -236,11 +240,12 @@ init -1500 python in _editor:
             self.console.max = max(self.console.cx - sub, 0)
         def RIGHT(self, add=1):
             bx, by = self.wrap2buf[self.console.cy]
-            while self.console.cx + add > len(self.line) and bx+self.console.cx < len(self.data[self.lnr+by]):
+            while self.console.cx + add > len(self.line) and bx+self.console.cx <= len(self.data[self.lnr+by]):
                 add -= len(self.line) - self.console.cx + 1
                 self.DOWN()
                 self.console.cx = 0
-            self.console.max = min(self.console.cx + add, len(self.line))
+            self.console.cx = min(self.console.cx + add, len(self.line))
+            self.console.max = self.console.cx
 
         def ctrl_LEFT(self):
             bx, by = self.wrap2buf[self.console.cy]
@@ -363,8 +368,8 @@ init -1500 python in _editor:
             self.data[by] += end
             self.parse()
 
-            # move cursor
-            if len(entries) <= 1 and cx + len(entries[0]) - self.wrap2buf[self.console.cy][0] < len(self.line): 
+            # distinction required to prevent cursor jump when pasting/inserting on first line.
+            if len(entries) <= 1 and cx + len(entries[0]) - self.wrap2buf[self.console.cy][0] < len(self.line):
                 self.console.cx = cx + len(entries[0])
             else:
                 self.UP()
@@ -419,6 +424,43 @@ init -1500 python in _editor:
             if act:
                 self._act_out(*act)
 
+        def search_init(self, search):
+            self.search_string = search
+
+        def search(self):
+            if self.search_string is not "":
+                cx, cy, CX, CY, none_selected = self._ordered_cursor_coordinates()
+                sx, sy, ex, ey = self._cursor2buf_coords(cx, cy, CX, CY)
+                self.find_upstream = re.finditer(self.search_string, self.data[sy][sx:] + "\n" + "\n".join(self.data[sy+1:]))
+                self.find_downstream = re.finditer(self.search_string, "\n".join(self.data[:sy-1]) + "\n" + self.data[sy][:sx + len(self.search_string) - 1])
+                self.search_next()
+
+        def search_next(self):
+            chars = None
+            try:
+                m = next(self.find_upstream)
+                chars = m.start()
+            except StopIteration:
+                try:
+                    m = next(self.find_downstream)
+                    chars = m.start()
+                except StopIteration:
+                    renpy.notify("Not found")
+                    pass
+                if chars is not None:
+                    self.console.CY = self.console.CX = self.lnr = 0
+                    self.PAGEUP()
+                    self.HOME()
+                    self.rewrap()
+            if chars is not None:
+                self.console.cx = self.console.CX
+                self.console.cy = self.console.CY
+                self.RIGHT(chars)
+                self.console.CX, self.console.CY = self.console.cx, self.console.cy
+                self.RIGHT(m.end()-m.start())
+                renpy.redraw(self.console, 0)
+
+
     class Editor(renpy.Displayable):
         def __init__(self, *a, **b):
             super(Editor, self).__init__(a, b)
@@ -427,6 +469,7 @@ init -1500 python in _editor:
             self.view = None
             self.timer = time.time()
             self.is_mouse_pressed = False
+            self.capture_events = True
             self.exit() # sets is_visible and cursor coords to default
 
         def render(self, width, height, st, at):
@@ -465,37 +508,37 @@ init -1500 python in _editor:
             self.max = int(x * 113.3 / config.screen_width)
             cy = int(y * 31.5 / config.screen_height)
 
-            # selection below displayes screen caused this. FIXME: maybe scroll down if this happens?
             if cy >= self.view.nolines:
                 cy = self.view.nolines - 1
             return (min(self.max, len(self.view.wrapped_buffer[cy])), cy)
 
         def event(self, ev, x, y, st):
-            import pygame
-            a = 0.96
-            b = 7
-            if ev.type == pygame.MOUSEBUTTONDOWN:
-                self.cx, self.cy = self._screen_to_cursor_coordinates(x, y * a - b)
-                if time.time() - self.timer < 0.5:
-                    bx, by = self.view.wrap2buf[self.cy]
-                    m = re.compile(r'\w*$').search(self.view.data[self.view.lnr+by][:bx+self.cx])
-                    if m:
-                        self.cx -= len(m.group(0))
-                    m = re.compile(r'^\w*').match(self.view.data[self.view.lnr+by][bx+self.cx:])
-                    if m:
-                        self.max = self.CX = min(self.cx+len(m.group(0)), len(self.view.line))
-                else:
-                    self.timer = time.time()
-                    self.CX, self.CY = self.cx, self.cy
-                renpy.redraw(self, 0)
-                self.is_mouse_pressed = True
-            if self.is_mouse_pressed and (ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP):
-                if ev.type == pygame.MOUSEMOTION:
-                    self.CX, self.CY = self._screen_to_cursor_coordinates(x, y * a - b)
-                renpy.redraw(self, 0)
-                if ev.type == pygame.MOUSEBUTTONUP:
-                    self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
-                    self.is_mouse_pressed = False
+            if self.capture_events:
+                import pygame
+                a = 0.96
+                b = 7
+                if ev.type == pygame.MOUSEBUTTONDOWN:
+                    self.cx, self.cy = self._screen_to_cursor_coordinates(x, y * a - b)
+                    if time.time() - self.timer < 0.5:
+                        bx, by = self.view.wrap2buf[self.cy]
+                        m = re.compile(r'\w*$').search(self.view.data[self.view.lnr+by][:bx+self.cx])
+                        if m:
+                            self.cx -= len(m.group(0))
+                        m = re.compile(r'^\w*').match(self.view.data[self.view.lnr+by][bx+self.cx:])
+                        if m:
+                            self.max = self.CX = min(self.cx+len(m.group(0)), len(self.view.line))
+                    else:
+                        self.timer = time.time()
+                        self.CX, self.CY = self.cx, self.cy
+                    renpy.redraw(self, 0)
+                    self.is_mouse_pressed = True
+                if self.is_mouse_pressed and (ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP):
+                    if ev.type == pygame.MOUSEMOTION:
+                        self.CX, self.CY = self._screen_to_cursor_coordinates(x, y * a - b)
+                    renpy.redraw(self, 0)
+                    if ev.type == pygame.MOUSEBUTTONUP:
+                        self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
+                        self.is_mouse_pressed = False
 
         def start(self, ctxt, offset=2):
             (fname, lnr) = ctxt
@@ -547,52 +590,75 @@ screen editor:
             window:
                 text view.show_errors style "error"
 
-        for keystr in sorted(view.keymap, key=len):
-            key keystr action Function(view.handlekey, keystr)
+        if view.show_search:
+            background Frame("gui/frame.png", gui.confirm_frame_borders, xalign=0.5, yalign=0.5, xsize=800, ysize=400)
+            vbox:
+                xalign 0.4
+                yalign 0.5
+                text "Enter search string:\n":
+                    size 20
+                    color "#fff"
 
-        key "shift_K_RETURN" action [Function(editor.exit, apply = True), Return()]
-        key "shift_K_KP_ENTER" action [Function(editor.exit, apply = True), Return()]
+                add Input(hover_color="#3399ff",size=28, color="#afa", default=view.search_string, changed=view.search_init, length=256)
+                hbox:
+                    textbutton "OK":
+                        text_size 20
+                        text_color "#fff"
+                        action Function(view.search)
+                        keysym('K_RETURN', 'K_KP_ENTER')
+                    textbutton "Cancel":
+                        text_size 20
+                        text_color "#fff"
+                        action [SetVariable("_editor.editor.capture_events", True), SetVariable("_editor.editor.view.show_search", False)]
+                        keysym('K_ESCAPE')
+        else:
+            for keystr in sorted(view.keymap, key=len):
+                key keystr action Function(view.handlekey, keystr)
 
-        for keystr in 'zy':
-            key 'ctrl_K_'+keystr action Function(view.handlekey, 'ctrl_K_'+keystr)
-            key 'repeat_ctrl_K_'+keystr action Function(view.handlekey, 'repeat_ctrl_K_'+keystr)
+            key "shift_K_RETURN" action [Function(editor.exit, apply = True), Return()]
+            key "shift_K_KP_ENTER" action [Function(editor.exit, apply = True), Return()]
 
-        key "K_ESCAPE" action [Function(editor.exit), Return()]
+            for keystr in 'zy':
+                key 'ctrl_K_'+keystr action Function(view.handlekey, 'ctrl_K_'+keystr)
+                key 'repeat_ctrl_K_'+keystr action Function(view.handlekey, 'repeat_ctrl_K_'+keystr)
 
-        key "ctrl_K_c" action Function(view.copy)
-        key "ctrl_K_x" action Function(view.cut)
-        key "ctrl_K_v" action Function(view.insert)
+            key "K_ESCAPE" action [Function(editor.exit), Return()]
 
-        key "K_TAB" action Function(view.insert, ["    "])
-        key "K_SPACE" action Function(view.insert, [" "])
-        key "repeat_K_SPACE" action Function(view.insert, [" "])
+            key "ctrl_K_c" action Function(view.copy)
+            key "ctrl_K_f" action [SetVariable("_editor.editor.capture_events", False), SetVariable("_editor.editor.view.show_search", True)]
+            key "ctrl_K_v" action Function(view.insert)
+            key "ctrl_K_x" action Function(view.cut)
 
-        for i in xrange(0, len(view.oSymName)):
-            key "K_"+view.oSymName[i] action Function(view.insert, [view.oSymLow[i]])
-            key "shift_K_"+view.oSymName[i] action Function(view.insert, [view.oSymUpp[i]])
-            key "repeat_K_"+view.oSymName[i] action Function(view.insert, [view.oSymLow[i]])
-            key "repeat_shift_K_"+view.oSymName[i] action Function(view.insert, [view.oSymUpp[i]])
+            key "K_TAB" action Function(view.insert, ["    "])
+            key "K_SPACE" action Function(view.insert, [" "])
+            key "repeat_K_SPACE" action Function(view.insert, [" "])
 
-        for nr in xrange(0, 10):
-            key "K_"+str(nr) action Function(view.insert, [str(nr)])
-            key "K_KP"+str(nr) action Function(view.insert, [str(nr)])
-            key "repeat_K_"+str(nr) action Function(view.insert, [str(nr)])
-            key "repeat_K_KP"+str(nr) action Function(view.insert, [str(nr)])
-            key "shift_K_"+str(nr) action Function(view.insert, [view.nrSymbol[nr]])
-            key "repeat_shift_K_"+str(nr) action Function(view.insert, [view.nrSymbol[nr]])
+            for i in xrange(0, len(view.oSymName)):
+                key "K_"+view.oSymName[i] action Function(view.insert, [view.oSymLow[i]])
+                key "shift_K_"+view.oSymName[i] action Function(view.insert, [view.oSymUpp[i]])
+                key "repeat_K_"+view.oSymName[i] action Function(view.insert, [view.oSymLow[i]])
+                key "repeat_shift_K_"+view.oSymName[i] action Function(view.insert, [view.oSymUpp[i]])
 
-        for c in xrange(ord('a'), ord('z')+1):
-            key "K_"+chr(c) action Function(view.insert, [chr(c)])
-            key "shift_K_"+chr(c) action Function(view.insert, [chr(c).upper()])
-            key "repeat_K_"+chr(c) action Function(view.insert, [chr(c)])
-            key "repeat_shift_K_"+chr(c) action Function(view.insert, [chr(c).upper()])
+            for nr in xrange(0, 10):
+                key "K_"+str(nr) action Function(view.insert, [str(nr)])
+                key "K_KP"+str(nr) action Function(view.insert, [str(nr)])
+                key "repeat_K_"+str(nr) action Function(view.insert, [str(nr)])
+                key "repeat_K_KP"+str(nr) action Function(view.insert, [str(nr)])
+                key "shift_K_"+str(nr) action Function(view.insert, [view.nrSymbol[nr]])
+                key "repeat_shift_K_"+str(nr) action Function(view.insert, [view.nrSymbol[nr]])
 
-        key "K_KP_PERIOD" action Function(view.insert, ["."])
-        key "K_KP_DIVIDE" action Function(view.insert, ["/"])
-        key "K_KP_MULTIPLY" action Function(view.insert, ["*"])
-        key "K_KP_MINUS" action Function(view.insert, ["-"])
-        key "K_KP_PLUS" action Function(view.insert, ["+"])
-        key "K_KP_EQUALS" action Function(view.insert, ["="])
+            for c in xrange(ord('a'), ord('z')+1):
+                key "K_"+chr(c) action Function(view.insert, [chr(c)])
+                key "shift_K_"+chr(c) action Function(view.insert, [chr(c).upper()])
+                key "repeat_K_"+chr(c) action Function(view.insert, [chr(c)])
+                key "repeat_shift_K_"+chr(c) action Function(view.insert, [chr(c).upper()])
+
+            key "K_KP_PERIOD" action Function(view.insert, ["."])
+            key "K_KP_DIVIDE" action Function(view.insert, ["/"])
+            key "K_KP_MULTIPLY" action Function(view.insert, ["*"])
+            key "K_KP_MINUS" action Function(view.insert, ["-"])
+            key "K_KP_PLUS" action Function(view.insert, ["+"])
+            key "K_KP_EQUALS" action Function(view.insert, ["="])
 
         hbox:
             style_prefix "quick"

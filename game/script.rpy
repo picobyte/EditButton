@@ -10,15 +10,15 @@ define e = Character('Eileen')
 
 label cancel:
 
-    "With 'Cancel' you discard changes. That's just fleeing from syntax errors and also benign changes are lost."
+    "With 'Cancel' you discard changes. That's just fleeing from syntax errors; also unapplied benign changes are lost."
 
-    "'Visual' in the editor returns you to visual modus, and changes are kept in memory, but lost after a reload or something similar. In general it is safest to apply changes."
+    "'Visual' in the editor returns you to visual modus. changes are kept in memory, but lost after a reload or something similar. to store them it is safest to apply changes."
 
     "Applied changes are written to the .rpy file on disk. Make sure that you're not working on this .rpy file in another editor. It's advisable to have backups or work with version control."
 
     "Now return to the editor modus."
 
-    # Now let's replace the text in the narration below here:
+    # Let's replace the text in the narration below here:
 
     "Replace this text."
 
@@ -45,7 +45,7 @@ label start:
 
     "This visual novel has a built-in editor. Note the Edit button below. Press it to try it out."
 
-    # Now yo,u've entered the edit modus. In here you can make edit your Ren'py script. With the visual
+    # Now you've entered the edit modus. In here you can make edit your Ren'py script. With the visual
     # button, below, you can return to where you were in the visual novel, but let's stay in editor
     # modus for a bit.
 
