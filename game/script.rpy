@@ -14,15 +14,15 @@ label cancel:
 
     "'Visual' in the editor returns you to visual modus. changes are kept in memory, but lost after a reload or something similar. to store them it is safest to apply changes."
 
-    "Applied changes are written to the .rpy file on disk. Make sure that you're not working on this .rpy file in another editor. It's advisable to have backups or work with version control."
-
-    "Now return to the editor modus."
+    "Applied changes are written to the .rpy file on disk. Make sure that you're not working on this same .rpy file in an external editor, and keep some backups. Now return to the editor modus."
 
     # Let's replace the text in the narration below here:
 
-    "Replace this text."
+    "Make changes to this text."
 
-    # You can use the mouse or shift arrow movement for selection and some common keyboard shortcuts are available.
+    # For selection, you can use the mouse drag or doubleclick on words and use shift (+ ctrl) and keyboard arrow movement ctrl+x and some common keyboard shortcuts are available.
+
+    # changes can be undone with Ctrl+u and redone with Ctrl+z although undoing many changes is a bit quirky still
 
     # Apply the change (write the change to disk) and you will return to visual modus.
 
@@ -45,17 +45,14 @@ label start:
 
     "This visual novel has a built-in editor. Note the Edit button below. Press it to try it out."
 
-    # Now you've entered the edit modus. In here you can make edit your Ren'py script. With the visual
-    # button, below, you can return to where you were in the visual novel, but let's stay in editor
-    # modus for a bit.
+    # Now you've entered the edit modus where you change your Ren'py script. With the visual
+    # button, below, you return to where you left off in the visual novel.
 
-    # Move the cursor by mouse click or keyboard arrows. Then, for instance, try adding dots to this line..
+    # Keyboard and mouse are functional. If you add for instance dots to this line..
 
-    # You may have noticed that now 3 buttons are shown at the bottom: Apply, Cancel and Visual.
+    # You may notice now 3 buttons are shown in the quickmenu below: Apply, Cancel and Visual.
 
-    # However, if you add something that is not valid ren'py..
-
-    # ..you see a warning and 'Hide' is shown (or 'Debug' if the error is hidden), instead of Apply.
+    # If you add something that is not valid ren'py, however you'll get a warning and the apply button is replaced by Hide (or 'Debug' when pressed).
 
     # Now press Cancel, and continue the visual novel to the next line..
 
@@ -73,11 +70,11 @@ label start:
 
 label applied:
 
-    "When you returned from the visual modus, you may have observed the reload. That is required so your applied change is shown in visual modus. A reload can also be triggered with shift+r."
+    "When you returned from the visual modus, you may have observed a reload. Reload is required to see applied changea in visual modus. A reload can also be triggered with shift+r (but unapplied changes are lost!)."
 
-    "Sometimes a change can cause the visual novel to restart. During development you can add jumps to fast forward dialogue."
+    "Sometimes a change can cause the visual novel to restart. A bit annoying but maybe just add some jumps to fast forward dialogue."
 
-    "The editor has some more quirks, and lacks features, but should already be a bit useful. let's go back to the editor once more."
+    "The editor has more quirks, and lacks features, but should already be a bit useful. let's go back to the editor once more."
 
     # something goes wrong when scrolling near long lines
 
