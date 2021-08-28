@@ -437,12 +437,19 @@ init -1500 python in _editor:
 
         def search_next(self):
             chars = None
+            had_selection = (abs(self.console.cx - self.console.CX) + 1) * (abs(self.console.cy - self.console.CY) + 1)
             try:
-                m = next(self.find_upstream)
+                while True:
+                    m = next(self.find_upstream)
+                    if m.start() != 0: # do not return exact same match
+                        break
                 chars = m.start()
             except StopIteration:
                 try:
-                    m = next(self.find_downstream)
+                    while True:
+                        m = next(self.find_downstream)
+                        if m.start() != 0:
+                            break
                     chars = m.start()
                 except StopIteration:
                     renpy.notify("Not found")
@@ -452,7 +459,9 @@ init -1500 python in _editor:
                     self.PAGEUP()
                     self.HOME()
                     self.rewrap()
-            if chars is not None:
+            if chars is None:
+                renpy.notify("Not found")
+            else:
                 self.console.cx = self.console.CX
                 self.console.cy = self.console.CY
                 self.RIGHT(chars)
