@@ -601,75 +601,53 @@ screen editor:
             window:
                 text view.show_errors style "error"
 
-        if view.show_search:
-            background Frame("gui/frame.png", gui.confirm_frame_borders, xalign=0.5, yalign=0.5, xsize=800, ysize=400)
-            vbox:
-                xalign 0.4
-                yalign 0.5
-                text "Enter search string:\n":
-                    size 20
-                    color "#fff"
+        for keystr in sorted(view.keymap, key=len):
+            key keystr action Function(view.handlekey, keystr)
 
-                add Input(hover_color="#3399ff",size=28, color="#afa", default=view.search_string, changed=view.search_init, length=256)
-                hbox:
-                    textbutton "OK":
-                        text_size 20
-                        text_color "#fff"
-                        action Function(view.search)
-                        keysym('K_RETURN', 'K_KP_ENTER')
-                    textbutton "Cancel":
-                        text_size 20
-                        text_color "#fff"
-                        action [SetVariable("_editor.editor.capture_events", True), SetVariable("_editor.editor.view.show_search", False)]
-                        keysym('K_ESCAPE')
-        else:
-            for keystr in sorted(view.keymap, key=len):
-                key keystr action Function(view.handlekey, keystr)
+        key "shift_K_RETURN" action [Function(editor.exit, apply = True), Return()]
+        key "shift_K_KP_ENTER" action [Function(editor.exit, apply = True), Return()]
 
-            key "shift_K_RETURN" action [Function(editor.exit, apply = True), Return()]
-            key "shift_K_KP_ENTER" action [Function(editor.exit, apply = True), Return()]
+        for keystr in 'zy':
+            key 'ctrl_K_'+keystr action Function(view.handlekey, 'ctrl_K_'+keystr)
+            key 'repeat_ctrl_K_'+keystr action Function(view.handlekey, 'repeat_ctrl_K_'+keystr)
 
-            for keystr in 'zy':
-                key 'ctrl_K_'+keystr action Function(view.handlekey, 'ctrl_K_'+keystr)
-                key 'repeat_ctrl_K_'+keystr action Function(view.handlekey, 'repeat_ctrl_K_'+keystr)
+        key "K_ESCAPE" action [Function(editor.exit), Return()]
 
-            key "K_ESCAPE" action [Function(editor.exit), Return()]
+        key "ctrl_K_c" action Function(view.copy)
+        key "ctrl_K_f" action [SetVariable("_editor.editor.capture_events", False), Show("find_text")]
+        key "ctrl_K_v" action Function(view.insert)
+        key "ctrl_K_x" action Function(view.cut)
 
-            key "ctrl_K_c" action Function(view.copy)
-            key "ctrl_K_f" action [SetVariable("_editor.editor.capture_events", False), SetVariable("_editor.editor.view.show_search", True)]
-            key "ctrl_K_v" action Function(view.insert)
-            key "ctrl_K_x" action Function(view.cut)
+        key "K_TAB" action Function(view.insert, ["    "])
+        key "K_SPACE" action Function(view.insert, [" "])
+        key "repeat_K_SPACE" action Function(view.insert, [" "])
 
-            key "K_TAB" action Function(view.insert, ["    "])
-            key "K_SPACE" action Function(view.insert, [" "])
-            key "repeat_K_SPACE" action Function(view.insert, [" "])
+        for i in xrange(0, len(view.oSymName)):
+            key "K_"+view.oSymName[i] action Function(view.insert, [view.oSymLow[i]])
+            key "shift_K_"+view.oSymName[i] action Function(view.insert, [view.oSymUpp[i]])
+            key "repeat_K_"+view.oSymName[i] action Function(view.insert, [view.oSymLow[i]])
+            key "repeat_shift_K_"+view.oSymName[i] action Function(view.insert, [view.oSymUpp[i]])
 
-            for i in xrange(0, len(view.oSymName)):
-                key "K_"+view.oSymName[i] action Function(view.insert, [view.oSymLow[i]])
-                key "shift_K_"+view.oSymName[i] action Function(view.insert, [view.oSymUpp[i]])
-                key "repeat_K_"+view.oSymName[i] action Function(view.insert, [view.oSymLow[i]])
-                key "repeat_shift_K_"+view.oSymName[i] action Function(view.insert, [view.oSymUpp[i]])
+        for nr in xrange(0, 10):
+            key "K_"+str(nr) action Function(view.insert, [str(nr)])
+            key "K_KP"+str(nr) action Function(view.insert, [str(nr)])
+            key "repeat_K_"+str(nr) action Function(view.insert, [str(nr)])
+            key "repeat_K_KP"+str(nr) action Function(view.insert, [str(nr)])
+            key "shift_K_"+str(nr) action Function(view.insert, [view.nrSymbol[nr]])
+            key "repeat_shift_K_"+str(nr) action Function(view.insert, [view.nrSymbol[nr]])
 
-            for nr in xrange(0, 10):
-                key "K_"+str(nr) action Function(view.insert, [str(nr)])
-                key "K_KP"+str(nr) action Function(view.insert, [str(nr)])
-                key "repeat_K_"+str(nr) action Function(view.insert, [str(nr)])
-                key "repeat_K_KP"+str(nr) action Function(view.insert, [str(nr)])
-                key "shift_K_"+str(nr) action Function(view.insert, [view.nrSymbol[nr]])
-                key "repeat_shift_K_"+str(nr) action Function(view.insert, [view.nrSymbol[nr]])
+        for c in xrange(ord('a'), ord('z')+1):
+            key "K_"+chr(c) action Function(view.insert, [chr(c)])
+            key "shift_K_"+chr(c) action Function(view.insert, [chr(c).upper()])
+            key "repeat_K_"+chr(c) action Function(view.insert, [chr(c)])
+            key "repeat_shift_K_"+chr(c) action Function(view.insert, [chr(c).upper()])
 
-            for c in xrange(ord('a'), ord('z')+1):
-                key "K_"+chr(c) action Function(view.insert, [chr(c)])
-                key "shift_K_"+chr(c) action Function(view.insert, [chr(c).upper()])
-                key "repeat_K_"+chr(c) action Function(view.insert, [chr(c)])
-                key "repeat_shift_K_"+chr(c) action Function(view.insert, [chr(c).upper()])
-
-            key "K_KP_PERIOD" action Function(view.insert, ["."])
-            key "K_KP_DIVIDE" action Function(view.insert, ["/"])
-            key "K_KP_MULTIPLY" action Function(view.insert, ["*"])
-            key "K_KP_MINUS" action Function(view.insert, ["-"])
-            key "K_KP_PLUS" action Function(view.insert, ["+"])
-            key "K_KP_EQUALS" action Function(view.insert, ["="])
+        key "K_KP_PERIOD" action Function(view.insert, ["."])
+        key "K_KP_DIVIDE" action Function(view.insert, ["/"])
+        key "K_KP_MULTIPLY" action Function(view.insert, ["*"])
+        key "K_KP_MINUS" action Function(view.insert, ["-"])
+        key "K_KP_PLUS" action Function(view.insert, ["+"])
+        key "K_KP_EQUALS" action Function(view.insert, ["="])
 
         hbox:
             style_prefix "quick"
@@ -685,3 +663,30 @@ screen editor:
                     textbutton _("Hide") action Function(editor.show_debug_messages, False)
                 textbutton _("Cancel") action [Function(editor.exit, discard = True), Return()]
             textbutton _("Visual") action [Function(editor.exit), Return()]
+
+screen find_text:
+    default editor = _editor.editor
+    default view = editor.view
+    frame:
+        xalign 0.5
+        yalign 0.5
+        background AlphaMask(Image("gui/frame.png", gui.confirm_frame_borders), mask="#000a")
+        vbox:
+            xalign 0.4
+            yalign 0.5
+            text "Enter search string:\n":
+                size 20
+                color "#fff"
+
+            add Input(hover_color="#3399ff",size=28, color="#afa", default=view.search_string, changed=view.search_init, length=256)
+            hbox:
+                textbutton "OK":
+                    text_size 20
+                    text_color "#fff"
+                    action Function(view.search)
+                    keysym('K_RETURN', 'K_KP_ENTER')
+                textbutton "Cancel":
+                    text_size 20
+                    text_color "#fff"
+                    action [SetVariable("_editor.editor.capture_events", True), Hide("find_text")]
+                    keysym('K_ESCAPE')
