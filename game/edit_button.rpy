@@ -562,6 +562,8 @@ init -1500 python in _editor:
                     self.view.handlekey("END") # NB. call via handlekey triggers cursor redraw.
                 self.view = self.fl[fname]
                 self.is_visible = True
+                self.view.rewrap()
+                renpy.redraw(self, 0)
 
         def exit(self, discard=False, apply=False):
             """ unless discarded, changes are kept in store. Applied changes are not visible until reload (shift+R). """
