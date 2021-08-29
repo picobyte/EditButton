@@ -743,11 +743,14 @@ screen editor:
                 textbutton _("Cancel") action [Function(editor.exit, discard = True), Return()]
             textbutton _("Visual") action [Function(editor.exit), Return()]
             if _editor.spellcheck_modus == "Check":
-                textbutton _("Suggest") action Function(editor.set_spellcheck_modus)
-            if _editor.spellcheck_modus == "Suggest":
-                textbutton _("Suggest") action Function(editor.set_spellcheck_modus)
+                textbutton _("No check") action Function(editor.set_spellcheck_modus)
+            #replace by below once suggest modus works
+            #if _editor.spellcheck_modus == "Check":
+            #    textbutton _("Suggest") action Function(editor.set_spellcheck_modus)
+            #if _editor.spellcheck_modus == "Suggest":
+            #    textbutton _("No check") action Function(editor.set_spellcheck_modus)
             if _editor.spellcheck_modus == "No check":
-                textbutton _("Suggest") action Function(editor.set_spellcheck_modus)
+                textbutton _("Check") action Function(editor.set_spellcheck_modus)
 
 screen find_text:
     default editor = _editor.editor
