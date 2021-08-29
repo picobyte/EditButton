@@ -70,15 +70,21 @@ label start:
 
 label applied:
 
-    "When you returned from the visual modus, you may have observed a reload. Reload is required to see applied changea in visual modus. A reload can also be triggered with shift+r (but unapplied changes are lost!)."
+    "When you returned from the visual modus, you may have observed a reload. Reload is required to see applied changes in visual modus. A reload can also be triggered with shift+r (but unapplied changes are lost!)."
 
     "Sometimes a change can cause the visual novel to restart. A bit annoying but maybe just add some jumps to fast forward dialogue."
 
     "The editor has more quirks, and lacks features, but should already be a bit useful. let's go back to the editor once more."
 
-    # something goes wrong when scrolling near long lines
+    # There is a find function, which you can trigger with ctrl+f, but sometimes the highlighted string is off-by one. Regex replacement is what I'd like to add when it's fixed.
 
-    # All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. 
+    # scrolling near long lines is a bit odd:
+
+    # All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy. All work and no play makes Jack a dull boy.
+
+    # maybe insertion of code templates could be nice.
+
+
     "End of file."
 
     return

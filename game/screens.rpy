@@ -38,6 +38,8 @@ style input:
     color gui.accent_color
 
 style hyperlink_text:
+    font "Inconsolata-Regular.ttf"
+    size gui.text_size
     color gui.accent_color
     hover_color gui.hover_color
     hover_underline True
