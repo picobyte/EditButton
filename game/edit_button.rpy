@@ -631,8 +631,7 @@ init -1500 python in _editor:
         def set_spellcheck_modus(self):
             global spellcheck_modus
             #FIXME: fix suggest modus
-            #next_modus = { "Check": "Suggest", "Suggest": "No check", "No check": "Suggest" }
-            next_modus = { "Check": "No check", "No check": "Check" }
+            next_modus = { "Check": "Suggest", "Suggest": "No check", "No check": "Check" }
             spellcheck_modus = next_modus[spellcheck_modus]
             if spellcheck_modus == "No check":
                 renpy.hide_screen("spelling_alternatives")
@@ -653,7 +652,7 @@ init 1701 python in _editor:
             editor.select_word()
             editor.view.set_word_candidates()
             renpy.redraw(editor, 0)
-            editor.is_mouse_pressed = True
+            editor.is_mouse_pressed = False
             editor.event_handler = "suggest_word"
             renpy.show_screen("spelling_alternatives", layer='top')
             renpy.restart_interaction()
@@ -742,13 +741,12 @@ screen editor:
                     textbutton _("Hide") action Function(editor.show_debug_messages, False)
                 textbutton _("Cancel") action [Function(editor.exit, discard = True), Return()]
             textbutton _("Visual") action [Function(editor.exit), Return()]
-            if _editor.spellcheck_modus == "Check":
-                textbutton _("No check") action Function(editor.set_spellcheck_modus)
-            #replace by below once suggest modus works
             #if _editor.spellcheck_modus == "Check":
-            #    textbutton _("Suggest") action Function(editor.set_spellcheck_modus)
-            #if _editor.spellcheck_modus == "Suggest":
             #    textbutton _("No check") action Function(editor.set_spellcheck_modus)
+            if _editor.spellcheck_modus == "Check":
+                textbutton _("Suggest") action Function(editor.set_spellcheck_modus)
+            if _editor.spellcheck_modus == "Suggest":
+                textbutton _("No check") action Function(editor.set_spellcheck_modus)
             if _editor.spellcheck_modus == "No check":
                 textbutton _("Check") action Function(editor.set_spellcheck_modus)
 
