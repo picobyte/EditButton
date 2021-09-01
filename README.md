@@ -3,7 +3,7 @@ Add a quick fix/edit button for Ren'Py developers
 
 Requirements: git, python (2), pip and the installation of python libraries as described below.
 
-The first three should be available for Windows or Mac, just google e.g. `git for windows'.
+The first three should be available for Windows or Mac, just google e.g. 'git for windows'.
 
 ```bash
 git clone https://github.com/picobyte/EditButton.git
@@ -33,7 +33,7 @@ python -m pip install --target python-packages pyspellchecker==0.5.6
 
 Latest working version of pygments is 2.5.2, thereafter python 2 support was removed.
 
-Replacing the __init__.py file is to remove non utf-8 characters, which causes a bytecode error during Ren'Py compilation. This should produce the same as `\`sed -i 's/[\d128-\d255]/\./g' game/python-packages/pygments/filters/\_\_init\_\_\.py\``
+Replacing the __init__.py file is to remove non utf-8 characters, which causes a bytecode error during Ren'Py compilation. This should produce the same as `sed -i 's/[\d128-\d255]/./g' game/python-packages/pygments/filters/__init__.py`
 
 This is a runtime Ren'Py editor. Licensed LGPL or MIT under certain conditions. Do not use this in commercial closed source only visual novels without eventual public releases unless a permission was granted.
 
