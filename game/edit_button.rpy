@@ -537,7 +537,6 @@ init -1500 python in _editor:
             self.view = None
             self.timer = time.time()
             self.is_mouse_pressed = False
-            self.event_handler = None
             self.exit() # sets is_visible and cursor coords to default
 
         def render(self, width, height, st, at):
@@ -613,7 +612,6 @@ init -1500 python in _editor:
                 renpy.hide_screen("spelling_alternatives")
 
         def start(self, ctxt, offset=2):
-            self.event_handler = None
             (fname, lnr) = ctxt
             if fname: # no fname indicates failure
                 lnr = lnr - 1
@@ -687,12 +685,10 @@ init 1701 python in _editor:
             editor.select_word()
             coords = editor.view.ordered_cursor_coordinates()
 
-
             editor.view.set_word_candidates()
             editor.view.console.CX = editor.view.console.cx
             editor.view.console.CY = editor.view.console.cy
             editor.is_mouse_pressed = False
-            editor.event_handler = "suggest_word"
             area = editor.spelling_alt_area()
             alts = editor.view.get_word_candidates()
             renpy.show_screen("spelling_alternatives", coords, area, alts)
@@ -732,7 +728,7 @@ screen editor:
         key "K_ESCAPE" action [Function(editor.exit), Return()]
 
         key "ctrl_K_c" action Function(view.copy)
-        key "ctrl_K_f" action [SetVariable("_editor.editor.event_handler", "find_text"), Show("find_text")]
+        key "ctrl_K_f" action Show("find_text")
         key "ctrl_K_v" action Function(view.insert)
         key "ctrl_K_x" action Function(view.cut)
 
@@ -816,7 +812,7 @@ screen find_text:
                 textbutton "Cancel":
                     text_size 20
                     text_color "#fff"
-                    action [SetVariable("_editor.editor.event_handler", None), Hide("find_text")]
+                    action Hide("find_text")
                     keysym('K_ESCAPE')
 
 screen spelling_alternatives(coords, suggestion_area, alts):
@@ -835,4 +831,5 @@ screen spelling_alternatives(coords, suggestion_area, alts):
                     text_hover_color "ff2"
                     action Function(_editor.editor.view.replace, alt, coords)
 
-        key "K_ESCAPE" action [SetVariable("_editor.editor.event_handler", None), Hide("spelling_alternatives")]
+        key "K_ESCAPE" action Hide("spelling_alternatives")
+
