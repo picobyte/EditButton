@@ -13,33 +13,10 @@ style default:
     size gui.text_size
     color gui.text_color
 
-style editor:
-    font "Inconsolata-Regular.ttf"
-    size gui.text_size
-    color gui.text_color
-
-style error:
-    font "Inconsolata-Regular.ttf"
-    size gui.text_size - 10
-    color "#f00"
-    xalign 0.50
-    yalign 0.70
-    background Frame("gui/skip.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
-    #padding gui.namebox_borders.padding
-
-style search:
-    font "Inconsolata-Regular.ttf"
-    xalign 0.50
-    yalign 0.50
-    background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
-    padding gui.namebox_borders.padding
-
 style input:
     color gui.accent_color
 
 style hyperlink_text:
-    font "Inconsolata-Regular.ttf"
-    size gui.text_size
     color gui.accent_color
     hover_color gui.hover_color
     hover_underline True
@@ -150,6 +127,7 @@ style say_thought is say_dialogue
 
 style namebox is default
 style namebox_label is say_label
+
 
 style window:
     xalign 0.5

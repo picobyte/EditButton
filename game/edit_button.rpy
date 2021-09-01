@@ -3,7 +3,32 @@ init -1500 python:
     style.editor = Style(style.default)
 
     # must be monospace or need/add shadow
-    style.editor.font = "Inconsolata-Regular.ttf"
+
+    style.error = Style(style.default)
+    style.search = Style(style.default)
+
+init:
+    style editor:
+        font "Inconsolata-Regular.ttf"
+
+    style error:
+        font "Inconsolata-Regular.ttf"
+        size gui.text_size - 10
+        color "#d00"
+        hover_color "#f11"
+        xalign 0.50
+        yalign 0.70
+        background Frame("gui/skip.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
+        hover_underline True
+        #padding gui.namebox_borders.padding
+
+    style search:
+        font "Inconsolata-Regular.ttf"
+        xalign 0.50
+        yalign 0.50
+        background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
+        padding gui.namebox_borders.padding
+
 
 init -1500 python in _editor:
     from store import config, style
@@ -20,7 +45,7 @@ init -1500 python in _editor:
     from renpyformatter import RenPyFormatter
     from spellchecker import SpellChecker
     lang = SpellChecker(language='en') # should also support ru, es, fr, pt and de
-    spellcheck_modus = "Check"
+    spellcheck_modus = "Suggest"
 
     class History(object):
         def __init__(self): self.reset()
@@ -112,6 +137,7 @@ init -1500 python in _editor:
 
         def parse(self):
             """ If changes were not yet parsed, check for errors; create colored_buffer for view on screen """
+            global spellcheck_modus
             if self.history.at != self._last_parsed_changes:
                 unknown_words = Set()
                 if spellcheck_modus != "No check":
@@ -128,10 +154,7 @@ init -1500 python in _editor:
                 self.colored_buffer = highlight(escaped, self.lexer, self.formater).split('\n')
                 for w in unknown_words:
                     for i in xrange(0, len(self.colored_buffer)):
-                        if spellcheck_modus == "Check":
-                            self.colored_buffer[i] = re.sub(r'\b'+w+r'\b', r'{color=#f00}'+w+r'{/color}', self.colored_buffer[i])
-                        elif spellcheck_modus == "Suggest":
-                            self.colored_buffer[i] = re.sub(r'\b'+w+r'\b', r'{a=suggest_word:'+w+r'}'+w+r'{/a}', self.colored_buffer[i])
+                        self.colored_buffer[i] = re.sub(r'\b'+w+r'\b', r'{a=_spell:'+w+r'}'+w+r'{/a}', self.colored_buffer[i])
                 self._last_parsed_changes = self.history.at
 
     class TextView(object):
@@ -143,7 +166,6 @@ init -1500 python in _editor:
             self.lineLenMax = 111
             self.show_errors = ""
             self.keymap = set(['mousedown_4', 'mousedown_5'])
-            # XXX default nolines should be relative to window + font size
             self._maxlines = nolines if nolines else int(config.screen_height / (34 + style.default.line_leading + style.default.line_spacing)) - 1
             self.parse()
             self._add_km(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['repeat_', ''])
@@ -167,6 +189,7 @@ init -1500 python in _editor:
             tot = 0
             for line in self.data[self.lnr:min(self.lnr + self._maxlines, len(self.data))]:
                 wrap = renpy.text.extras.textwrap(line, self.lineLenMax) or ['']
+
                 offs = 0
                 for l in wrap:
                     offs += line.index(l, offs) - offs
@@ -255,10 +278,10 @@ init -1500 python in _editor:
             self.word_candidates = lang.candidates(self.get_selected())
 
         def get_selected(self):
-            cx, cy, CX, CY, none_selected = self._ordered_cursor_coordinates()
+            cx, cy, CX, CY, none_selected = self.ordered_cursor_coordinates()
             if none_selected:
                 return ""
-            sx, sy, ex, ey = self._cursor2buf_coords(cx, cy, CX, CY)
+            sx, sy, ex, ey = self.cursor2buf_coords(cx, cy, CX, CY)
             copy = ""
             for y in xrange(sy, ey):
                 copy += self.data[y][sx:len(self.data[y])] + os.linesep
@@ -310,7 +333,7 @@ init -1500 python in _editor:
                 cons.cx = cons.max
             self.DELETE()
 
-        def _ordered_cursor_coordinates(self):
+        def ordered_cursor_coordinates(self):
             cx, cy = self.console.cx, self.console.cy
             CX, CY = self.console.CX, self.console.CY
 
@@ -327,14 +350,14 @@ init -1500 python in _editor:
                     none_selected = 1
             return (cx, cy, CX, CY, none_selected)
 
-        def _cursor2buf_coords(self, cx, cy, CX, CY):
+        def cursor2buf_coords(self, cx, cy, CX, CY, _none_selected=None):
             sx, sy = self.wrap2buf[cy]
             ex, ey = self.wrap2buf[CY]
             return (sx+cx, sy+self.lnr, ex+CX, ey+self.lnr)
 
         def DELETE(self):
-            cx, cy, CX, CY, none_selected = self._ordered_cursor_coordinates()
-            sx, sy, ex, ey = self._cursor2buf_coords(cx, cy, CX, CY)
+            cx, cy, CX, CY, none_selected = self.ordered_cursor_coordinates()
+            sx, sy, ex, ey = self.cursor2buf_coords(cx, cy, CX, CY)
 
             if sx != len(self.data[sy]) or not none_selected:
                 ex += none_selected # then delete the one right of the cursor
@@ -377,7 +400,7 @@ init -1500 python in _editor:
             if entries == None: # paste in absences of entries
                 entries = pyperclip.paste().split(os.linesep)
 
-            cx, cy, CX, CY, none_selected = self._ordered_cursor_coordinates()
+            cx, cy, CX, CY, none_selected = self.ordered_cursor_coordinates()
 
             if cx != CX or cy != CY:
                 self.DELETE()
@@ -454,12 +477,11 @@ init -1500 python in _editor:
 
         def search_init(self, search):
             self.search_string = search
-            renpy.show_screen("find_text", layer='top')
+            renpy.show_screen("find_text")
 
         def search(self):
             if self.search_string is not "":
-                cx, cy, CX, CY, none_selected = self._ordered_cursor_coordinates()
-                sx, sy, ex, ey = self._cursor2buf_coords(cx, cy, CX, CY)
+                sx, sy, ex, ey = self.cursor2buf_coords(*self.ordered_cursor_coordinates())
                 self.find_downstream = re.finditer(self.search_string, "\n".join(self.data[:sy-1]) + "\n" + self.data[sy][:(sx + len(self.search_string) - 1)])
                 self.find_upstream = re.finditer(self.search_string, self.data[sy][sx:] + "\n" + "\n".join(self.data[sy+1:]))
                 self.search_next()
@@ -498,11 +520,14 @@ init -1500 python in _editor:
                 self.RIGHT(m.end()-m.start())
                 renpy.redraw(self.console, 0)
 
-        def replace(self, alt):
-            renpy.hide("spelling_alternatives")
-            word = self.get_selected()
-            pass
-            #renpy.error("Not yet finished: " + word + ", " + alt)
+        def replace(self, alt, coords):
+            if renpy.get_screen("spelling_alternatives"):
+                renpy.hide_screen("spelling_alternatives")
+            self.console.cx = coords[0]
+            self.console.cy = coords[1]
+            self.console.CX = coords[2]
+            self.console.CY = coords[3]
+            self.insert([alt])
 
     class Editor(renpy.Displayable):
         def __init__(self, *a, **b):
@@ -565,26 +590,27 @@ init -1500 python in _editor:
                 self.max = self.CX = min(self.cx+len(m.group(0)), len(self.view.line))
 
         def event(self, ev, x, y, st):
-            if self.event_handler is None:
-                import pygame
-                a = 0.96
-                b = 7
-                if ev.type == pygame.MOUSEBUTTONDOWN:
-                    self.cx, self.cy = self._screen_to_cursor_coordinates(x, y * a - b)
-                    if time.time() - self.timer < 0.5:
-                        self.select_word()
-                    else:
-                        self.timer = time.time()
-                        self.CX, self.CY = self.cx, self.cy
-                    renpy.redraw(self, 0)
-                    self.is_mouse_pressed = True
-                if self.is_mouse_pressed and (ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP):
-                    if ev.type == pygame.MOUSEMOTION:
-                        self.CX, self.CY = self._screen_to_cursor_coordinates(x, y * a - b)
-                    renpy.redraw(self, 0)
-                    if ev.type == pygame.MOUSEBUTTONUP:
-                        self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
-                        self.is_mouse_pressed = False
+            import pygame
+            a = 0.96
+            b = 7
+            if ev.type == pygame.MOUSEBUTTONDOWN:
+                self.cx, self.cy = self._screen_to_cursor_coordinates(x, y * a - b)
+                if time.time() - self.timer < 0.5:
+                    self.select_word()
+                else:
+                    self.timer = time.time()
+                    self.CX, self.CY = self.cx, self.cy
+                renpy.redraw(self, 0)
+                self.is_mouse_pressed = True
+            if self.is_mouse_pressed and (ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP):
+                if ev.type == pygame.MOUSEMOTION:
+                    self.CX, self.CY = self._screen_to_cursor_coordinates(x, y * a - b)
+                renpy.redraw(self, 0)
+                if ev.type == pygame.MOUSEBUTTONUP:
+                    self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
+                    self.is_mouse_pressed = False
+            if renpy.get_screen("spelling_alternatives"):
+                renpy.hide_screen("spelling_alternatives")
 
         def start(self, ctxt, offset=2):
             self.event_handler = None
@@ -615,26 +641,27 @@ init -1500 python in _editor:
                 self.view.data.save()
 
         def spelling_alt_area(self):
-            char_width = config.screen_width / 113.3
-            char_height = config.screen_height / 31.5
+            char_width = config.screen_width / 113.0
+            height_offs = 46.0
+            width_offs = 11
+            char_height = config.screen_height / 30.0
 
-            x = int(self.view.console.cx * char_width)
-            y = int((self.view.console.cy + 1) * char_height)
-            suggestion_edit_distance = 2
+            x = int(width_offs + self.view.console.cx * char_width)
+            y = int(height_offs + self.view.console.cy * char_height)
 
-            width = int((len(self.view.get_selected()) + suggestion_edit_distance) * char_width)
+            m = max(map(lambda x: len(x), self.view.word_candidates))
+            width = int(m * char_width)
             height = int(len(self.view.get_word_candidates()) * char_height)
-            #renpy.error((x, y, x+width, x+height))
 
             return (x, y, width, height)
 
         def set_spellcheck_modus(self):
             global spellcheck_modus
-            #FIXME: fix suggest modus
-            next_modus = { "Check": "Suggest", "Suggest": "No check", "No check": "Check" }
-            spellcheck_modus = next_modus[spellcheck_modus]
             if spellcheck_modus == "No check":
+                spellcheck_modus = "Suggest"
                 renpy.hide_screen("spelling_alternatives")
+            else:
+                spellcheck_modus = "No check"
             self.view.data._last_parsed_changes = None
             self.view.parse()
             renpy.redraw(self, 0)
@@ -646,19 +673,32 @@ init 1701 python in _editor:
     if config.developer or config.editor:
         editor = Editor()
 
+    def hyperlink_styler_wrap(target):
+        if len(target) <= 7 or target[0:7] != "_spell:":
+            return hyperlink_styler(target)
 
-    def suggest_word(word):
+        return style.error
+
+    def hyperlink_callback_wrap(target):
+        if len(target) <= 7 or target[0:7] != "_spell:":
+            return hyperlink_callback(target)
+
         if not renpy.get_screen("spelling_alternatives"):
             editor.select_word()
+            coords = editor.view.ordered_cursor_coordinates()
+
+
             editor.view.set_word_candidates()
-            renpy.redraw(editor, 0)
+            editor.view.console.CX = editor.view.console.cx
+            editor.view.console.CY = editor.view.console.cy
             editor.is_mouse_pressed = False
             editor.event_handler = "suggest_word"
-            renpy.show_screen("spelling_alternatives", layer='top')
+            area = editor.spelling_alt_area()
+            alts = editor.view.get_word_candidates()
+            renpy.show_screen("spelling_alternatives", coords, area, alts)
             renpy.restart_interaction()
 
-    # https://www.renpy.org/doc/html/config.html#var-config.hyperlink_handlers
-    config.hyperlink_handlers['suggest_word'] = suggest_word
+    style.default.hyperlink_functions = (hyperlink_styler_wrap, hyperlink_callback_wrap, None)
 
 
 style editor_frame:
@@ -727,6 +767,12 @@ screen editor:
         key "K_KP_PLUS" action Function(view.insert, ["+"])
         key "K_KP_EQUALS" action Function(view.insert, ["="])
 
+        if renpy.get_screen("spelling_alternatives"):
+            key 'mousedown_1' action Hide("spelling_alternatives")
+
+        if renpy.get_screen("find_text"):
+            key 'mousedown_1' action Hide("spelling_alternatives")
+
         hbox:
             style_prefix "quick"
 
@@ -741,14 +787,10 @@ screen editor:
                     textbutton _("Hide") action Function(editor.show_debug_messages, False)
                 textbutton _("Cancel") action [Function(editor.exit, discard = True), Return()]
             textbutton _("Visual") action [Function(editor.exit), Return()]
-            #if _editor.spellcheck_modus == "Check":
-            #    textbutton _("No check") action Function(editor.set_spellcheck_modus)
-            if _editor.spellcheck_modus == "Check":
-                textbutton _("Suggest") action Function(editor.set_spellcheck_modus)
             if _editor.spellcheck_modus == "Suggest":
                 textbutton _("No check") action Function(editor.set_spellcheck_modus)
             if _editor.spellcheck_modus == "No check":
-                textbutton _("Check") action Function(editor.set_spellcheck_modus)
+                textbutton _("Suggest") action Function(editor.set_spellcheck_modus)
 
 screen find_text:
     default editor = _editor.editor
@@ -777,27 +819,20 @@ screen find_text:
                     action [SetVariable("_editor.editor.event_handler", None), Hide("find_text")]
                     keysym('K_ESCAPE')
 
-screen spelling_alternatives:
-    default editor = _editor.editor
-    default view = editor.view
-    default suggestion_area = editor.spelling_alt_area()
+screen spelling_alternatives(coords, suggestion_area, alts):
     frame:
+        padding (0, 0)
         area suggestion_area
-        background "#000a"
+        background "#111a"
         vbox:
-            first_spacing 0
-            spacing 0
-            box_wrap_spacing 0
-            xfill True
-            yfill True
-            xalign 0.5
-            yalign 0.5
-            for alt in view.get_word_candidates():
+            for alt in alts:
                 textbutton alt:
-                    padding (0, 0, 0, 0)
+                    padding (0, 0)
+                    minimum (0, 0)
                     text_font "Inconsolata-Regular.ttf"
                     text_size gui.text_size
                     text_color "#fff"
-                    action Function(view.replace, alt)
+                    text_hover_color "ff2"
+                    action Function(_editor.editor.view.replace, alt, coords)
 
         key "K_ESCAPE" action [SetVariable("_editor.editor.event_handler", None), Hide("spelling_alternatives")]
