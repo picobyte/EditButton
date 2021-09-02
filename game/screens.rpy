@@ -257,7 +257,7 @@ screen quick_menu():
         yalign 1.0
 
         if config.developer and _editor.editor:
-            textbutton _("Edit") action [_editor.editor.start(renpy.get_filename_line()), ShowMenu('editor')]
+            textbutton _("Edit") action [_editor.editor.start(renpy.get_filename_line()), ShowMenu('_editor_main')]
 
         textbutton _("Back") action Rollback()
         textbutton _("History") action ShowMenu('history')

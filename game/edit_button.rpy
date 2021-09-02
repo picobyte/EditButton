@@ -1,17 +1,17 @@
 init -1500 python:
 
-    style.editor = Style(style.default)
+    style._editor = Style(style.default)
     # must be monospace or need/add shadow
 
-    style.error = Style(style.default)
-    style.search = Style(style.default)
+    style._editor_error = Style(style.default)
+    style._editor_search = Style(style.default)
 
 init:
-    style editor:
-        font "Inconsolata-Regular.ttf"
+    style _editor:
+        font "codeface/fonts/proggy-clean/ProggyClean.ttf"
 
-    style error:
-        font "Inconsolata-Regular.ttf"
+    style _editor_error:
+        font "codeface/fonts/proggy-clean/ProggyClean.ttf"
         size gui.text_size - 10
         color "#d00"
         hover_color "#f11"
@@ -21,8 +21,8 @@ init:
         hover_underline True
         #padding gui.namebox_borders.padding
 
-    style search:
-        font "Inconsolata-Regular.ttf"
+    style _editor_search:
+        font "codeface/fonts/proggy-clean/ProggyClean.ttf"
         xalign 0.50
         yalign 0.50
         background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
@@ -250,7 +250,6 @@ init -1500 python in _editor:
         def __init__(self, **kwargs):
             super(EditView, self).__init__(**kwargs)
 
-            #self.styleprefix = "editor"
             self._add_km(['BACKSPACE', 'DELETE', 'RETURN'], ['repeat_', ''])
             self._add_km(['HOME', 'END'], ['shift_', ''])
             self._add_km(['LEFT', 'RIGHT'], ['shift_', 'ctrl_', 'ctrl_shift_', 'repeat_ctrl_shift_','', 'repeat_shift_', 'repeat_ctrl_', 'repeat_'])
@@ -270,7 +269,7 @@ init -1500 python in _editor:
             self.find_downstream = None
 
         def get_selected(self):
-            cx, cy, CX, CY, none_selected = self.ordered_cursor_coordinates()
+            cx, cy, CX, CY, none_selected = self.console.ordered_cursor_coordinates()
             if none_selected:
                 return ""
             sx, sy, ex, ey = self.cursor2buf_coords(cx, cy, CX, CY)
@@ -325,30 +324,13 @@ init -1500 python in _editor:
                 cons.cx = cons.max
             self.DELETE()
 
-        def ordered_cursor_coordinates(self):
-            cx, cy = self.console.cx, self.console.cy
-            CX, CY = self.console.CX, self.console.CY
-
-            none_selected = 0
-
-            if cy > CY:
-                cy, CY = CY, cy
-                cx, CX = CX, cx
-
-            elif cy == CY:
-                if cx > CX:
-                    cx, CX = CX, cx
-                elif cx == CX:
-                    none_selected = 1
-            return (cx, cy, CX, CY, none_selected)
-
         def cursor2buf_coords(self, cx, cy, CX, CY, _none_selected=None):
             sx, sy = self.wrap2buf[cy]
             ex, ey = self.wrap2buf[CY]
             return (sx+cx, sy+self.lnr, ex+CX, ey+self.lnr)
 
         def DELETE(self):
-            cx, cy, CX, CY, none_selected = self.ordered_cursor_coordinates()
+            cx, cy, CX, CY, none_selected = self.console.ordered_cursor_coordinates()
             sx, sy, ex, ey = self.cursor2buf_coords(cx, cy, CX, CY)
 
             if sx != len(self.data[sy]) or not none_selected:
@@ -392,7 +374,7 @@ init -1500 python in _editor:
             if entries == None: # paste in absences of entries
                 entries = pyperclip.paste().split(os.linesep)
 
-            cx, cy, CX, CY, none_selected = self.ordered_cursor_coordinates()
+            cx, cy, CX, CY, none_selected = self.console.ordered_cursor_coordinates()
 
             if cx != CX or cy != CY:
                 self.DELETE()
@@ -469,11 +451,11 @@ init -1500 python in _editor:
 
         def search_init(self, search):
             self.search_string = search
-            renpy.show_screen("find_text")
+            renpy.show_screen("_editor_find")
 
         def search(self):
             if self.search_string is not "":
-                sx, sy, ex, ey = self.cursor2buf_coords(*self.ordered_cursor_coordinates())
+                sx, sy, ex, ey = self.cursor2buf_coords(*self.console.ordered_cursor_coordinates())
                 self.find_downstream = re.finditer(self.search_string, "\n".join(self.data[:sy-1]) + "\n" + self.data[sy][:(sx + len(self.search_string) - 1)])
                 self.find_upstream = re.finditer(self.search_string, self.data[sy][sx:] + "\n" + "\n".join(self.data[sy+1:]))
                 self.search_next()
@@ -513,15 +495,15 @@ init -1500 python in _editor:
                 renpy.redraw(self.console, 0)
 
         def replace(self, alt, coords):
-            if renpy.get_screen("spelling_alternatives"):
-                renpy.hide_screen("spelling_alternatives")
+            if renpy.get_screen("_editor_suggestions"):
+                renpy.hide_screen("_editor_suggestions")
             self.console.cx = coords[0]
             self.console.cy = coords[1]
             self.console.CX = coords[2]
             self.console.CY = coords[3]
             self.insert([alt])
 
-        def get_spelling_alternatives(self):
+        def get_suggestions(self):
 
             char_width = config.screen_width / 113.0
             height_offs = 46.0
@@ -536,7 +518,7 @@ init -1500 python in _editor:
             width = int(wordlen_max * char_width)
             height = int(len(suggestions) * char_height)
 
-            return (self.ordered_cursor_coordinates(), (x, y, width, height), suggestions)
+            return (self.console.ordered_cursor_coordinates(), (x, y, width, height), suggestions)
 
     class Editor(renpy.Displayable):
         def __init__(self, *a, **b):
@@ -547,6 +529,23 @@ init -1500 python in _editor:
             self.timer = time.time()
             self.is_mouse_pressed = False
             self.exit() # sets is_visible and cursor coords to default
+
+        def ordered_cursor_coordinates(self):
+            cx, cy = self.cx, self.cy
+            CX, CY = self.CX, self.CY
+
+            none_selected = 0
+
+            if cy > CY:
+                cy, CY = CY, cy
+                cx, CX = CX, cx
+
+            elif cy == CY:
+                if cx > CX:
+                    cx, CX = CX, cx
+                elif cx == CX:
+                    none_selected = 1
+            return (cx, cy, CX, CY, none_selected)
 
         def render(self, width, height, st, at):
             """ draw the cursor or the selection """
@@ -617,8 +616,8 @@ init -1500 python in _editor:
                 if ev.type == pygame.MOUSEBUTTONUP:
                     self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
                     self.is_mouse_pressed = False
-            if renpy.get_screen("spelling_alternatives"):
-                renpy.hide_screen("spelling_alternatives")
+            if renpy.get_screen("_editor_suggestions"):
+                renpy.hide_screen("_editor_suggestions")
 
         def start(self, ctxt, offset=2):
             (fname, lnr) = ctxt
@@ -652,7 +651,7 @@ init -1500 python in _editor:
             global spellcheck_modus
             if spellcheck_modus == "No check":
                 spellcheck_modus = "Suggest"
-                renpy.hide_screen("spelling_alternatives")
+                renpy.hide_screen("_editor_suggestions")
             else:
                 spellcheck_modus = "No check"
             self.view.data._last_parsed_changes = None
@@ -670,38 +669,38 @@ init 1701 python in _editor:
         if len(target) <= 7 or target[0:7] != "_spell:":
             return hyperlink_styler(target)
 
-        return style.error
+        return style._editor_error
 
     def hyperlink_callback_wrap(target):
         if len(target) <= 7 or target[0:7] != "_spell:":
             return hyperlink_callback(target)
 
-        if not renpy.get_screen("spelling_alternatives"):
+        if not renpy.get_screen("_editor_suggestions"):
             editor.select_word()
             editor.is_mouse_pressed = False
-            renpy.show_screen("spelling_alternatives", *editor.view.get_spelling_alternatives())
+            renpy.show_screen("_editor_suggestions", *editor.view.get_suggestions())
             renpy.restart_interaction()
 
     style.default.hyperlink_functions = (hyperlink_styler_wrap, hyperlink_callback_wrap, None)
 
 
-style editor_frame:
+style _editor_frame:
         xpadding 10
         ypadding 10
         xpos 0
         background "#272822"
 
-screen editor:
-    style_prefix "editor"
+screen _editor_main:
+    style_prefix "_editor"
     default editor = _editor.editor
     default view = editor.view
     frame:
 
         add editor
-        text view.display() style "editor"
+        text view.display() style "_editor"
         if view.show_errors:
             window:
-                text view.show_errors style "error"
+                text view.show_errors style "_editor_error"
 
         for keystr in sorted(view.keymap, key=len):
             key keystr action Function(view.handlekey, keystr)
@@ -716,7 +715,7 @@ screen editor:
         key "K_ESCAPE" action [Function(editor.exit), Return()]
 
         key "ctrl_K_c" action Function(view.copy)
-        key "ctrl_K_f" action Show("find_text")
+        key "ctrl_K_f" action Show("_editor_find")
         key "ctrl_K_v" action Function(view.insert)
         key "ctrl_K_x" action Function(view.cut)
 
@@ -751,11 +750,11 @@ screen editor:
         key "K_KP_PLUS" action Function(view.insert, ["+"])
         key "K_KP_EQUALS" action Function(view.insert, ["="])
 
-        if renpy.get_screen("spelling_alternatives"):
-            key 'mousedown_1' action Hide("spelling_alternatives")
+        if renpy.get_screen("_editor_suggestions"):
+            key 'mousedown_1' action Hide("_editor_suggestions")
 
-        if renpy.get_screen("find_text"):
-            key 'mousedown_1' action Hide("spelling_alternatives")
+        if renpy.get_screen("_editor_find"):
+            key 'mousedown_1' action Hide("_editor_suggestions")
 
         hbox:
             style_prefix "quick"
@@ -776,16 +775,14 @@ screen editor:
             if _editor.spellcheck_modus == "No check":
                 textbutton _("Suggest") action Function(editor.set_spellcheck_modus)
 
-screen find_text:
+screen _editor_find:
     default editor = _editor.editor
     default view = editor.view
     frame:
-        xalign 0.5
-        yalign 0.5
+        align (0.5, 0.5)
         background AlphaMask(Image("gui/frame.png", gui.confirm_frame_borders), mask="#000a")
         vbox:
-            xalign 0.4
-            yalign 0.5
+            align (0.4, 0.5)
             text "Enter search string:\n":
                 size 20
                 color "#fff"
@@ -800,10 +797,10 @@ screen find_text:
                 textbutton "Cancel":
                     text_size 20
                     text_color "#fff"
-                    action Hide("find_text")
+                    action Hide("_editor_find")
                     keysym('K_ESCAPE')
 
-screen spelling_alternatives(coords, suggestion_area, alts):
+screen _editor_suggestions(coords, suggestion_area, alts):
     frame:
         padding (0, 0)
         area suggestion_area
@@ -813,11 +810,11 @@ screen spelling_alternatives(coords, suggestion_area, alts):
                 textbutton alt:
                     padding (0, 0)
                     minimum (0, 0)
-                    text_font "Inconsolata-Regular.ttf"
+                    text_font "codeface/fonts/proggy-clean/ProggyClean.ttf"
                     text_size gui.text_size
                     text_color "#fff"
                     text_hover_color "ff2"
                     action Function(_editor.editor.view.replace, alt, coords)
 
-        key "K_ESCAPE" action Hide("spelling_alternatives")
+        key "K_ESCAPE" action Hide("_editor_suggestions")
 
