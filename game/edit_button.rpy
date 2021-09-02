@@ -1,33 +1,93 @@
-init -1500 python:
+init -1700 python  in _editor:
+    #from game/codeface/fonts/*/vertical_metrics.txt:
 
-    style._editor = Style(style.default)
-    # must be monospace or need/add shadow
+    inconsolata = True
+    fontsize = 34.0
+    if inconsolata:
+        font = "codeface/fonts/inconsolata/Inconsolata-Regular.ttf"
+        # vertical_metrics.txt: should be 1.049, both:
+        Typo_Asc_Desc_Linegap_per_UPM = 1.135
+        winAsc_winDesc_per_UPM = 1.0485
+    else:
+        font = "codeface/fonts/proggy-clean/ProggyClean.ttf"
+        # vertical_metrics.txt: first should be 1.0, other 0.8125:
+        Typo_Asc_Desc_Linegap_per_UPM = 1.0
+        winAsc_winDesc_per_UPM = 0.820
 
-    style._editor_error = Style(style.default)
-    style._editor_search = Style(style.default)
+
+    maxCharPerLine = 127.875 / Typo_Asc_Desc_Linegap_per_UPM
+    maxLinesPerScreen = 30.5 / winAsc_winDesc_per_UPM
 
 init:
     style _editor:
-        font "codeface/fonts/proggy-clean/ProggyClean.ttf"
+        # must be monospace or need/add shadow
+        font _editor.font
+        size _editor.fontsize #gui.text_size
 
-    style _editor_error:
-        font "codeface/fonts/proggy-clean/ProggyClean.ttf"
-        size gui.text_size - 10
+    style _editor_frame:
+        padding (0, 0)
+        pos (0, 0)
+        background "#272822"
+
+    style _editor_window:
+        align (0.5, 1.0)
+        background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
+
+    style _editor_error is _editor:
+        size int(_editor.fontsize * 0.80)
         color "#d00"
         hover_color "#f11"
-        xalign 0.50
-        yalign 0.70
-        background Frame("gui/skip.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
         hover_underline True
-        #padding gui.namebox_borders.padding
 
-    style _editor_search:
-        font "codeface/fonts/proggy-clean/ProggyClean.ttf"
-        xalign 0.50
-        yalign 0.50
+    style _editor_search is _editor:
+        align (0.5, 0.5)
         background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
         padding gui.namebox_borders.padding
 
+    style _editor_suggestion_frame:
+        padding (0, 0)
+        background "#111a"
+
+    style _editor_textbutton is _editor:
+        color "#fff"
+        hover_color "ff2"
+
+screen _editor_find:
+    default editor = _editor.editor
+    default view = editor.view
+    frame:
+        align (0.5, 0.5)
+        background AlphaMask(Image("gui/frame.png", gui.confirm_frame_borders), mask="#000a")
+        vbox:
+            align (0.4, 0.5)
+            text "Enter search string:\n":
+                size 20
+                color "#fff"
+
+            add Input(hover_color="#3399ff",size=28, color="#afa", default=view.search_string, changed=view.search_init, length=256)
+            hbox:
+                textbutton "OK":
+                    text_style "_editor_textbutton"
+                    action Function(view.search)
+                    keysym('K_RETURN', 'K_KP_ENTER')
+                textbutton "Cancel":
+                    text_style "_editor_textbutton"
+                    action Hide("_editor_find")
+                    keysym('K_ESCAPE')
+
+screen _editor_suggestions(coords, suggestion_area, alts):
+    style_prefix "_editor_suggestion"
+    frame:
+        area suggestion_area
+        vbox:
+            for alt in alts:
+                textbutton alt:
+                    padding (0, 0)
+                    minimum (0, 0)
+                    text_style "_editor_textbutton"
+                    action Function(_editor.editor.view.replace, alt, coords)
+
+        key "K_ESCAPE" action Hide("_editor_suggestions")
 
 init -1500 python in _editor:
     from store import config, style
@@ -160,12 +220,14 @@ init -1500 python in _editor:
         """keeps track of horizontal position in text. Wrapping is not taken into account for position."""
         wheel_scroll_lines = 3
         def __init__(self, console, data, nolines=None, lnr=0, wheel_scroll_lines=None):
+            global fontsize
+            global maxCharPerLine, maxLinesPerScreen
+            global Typo_Asc_Desc_Linegap_per_UPM, winAsc_winDesc_per_UPM
             self.data = data
             self.lnr = lnr
-            self.lineLenMax = 111
             self.show_errors = ""
             self.keymap = set(['mousedown_4', 'mousedown_5'])
-            self._maxlines = nolines if nolines else int(config.screen_height / (34 + style.default.line_leading + style.default.line_spacing)) - 1
+            self._maxlines = int(maxLinesPerScreen)
             self.parse()
             self._add_km(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['repeat_', ''])
             self._add_km(['HOME', 'END'], ['ctrl_'])
@@ -182,12 +244,13 @@ init -1500 python in _editor:
 
         def rewrap(self):
             """ a copy of the buffer in view that is wrapped as shown in view """
+            global maxCharPerLine
             self.wrapped_buffer = []
             self.wrap2buf = {}
             atline = 0
             tot = 0
             for line in self.data[self.lnr:min(self.lnr + self._maxlines, len(self.data))]:
-                wrap = renpy.text.extras.textwrap(line, self.lineLenMax) or ['']
+                wrap = renpy.text.extras.textwrap(line, maxCharPerLine) or ['']
 
                 offs = 0
                 for l in wrap:
@@ -254,7 +317,6 @@ init -1500 python in _editor:
             self._add_km(['HOME', 'END'], ['shift_', ''])
             self._add_km(['LEFT', 'RIGHT'], ['shift_', 'ctrl_', 'ctrl_shift_', 'repeat_ctrl_shift_','', 'repeat_shift_', 'repeat_ctrl_', 'repeat_'])
             self._add_km(['UP', 'DOWN'], ['shift_', 'repeat_shift_'])
-            self.fontsize = 34
             self.handlekey("END")
             # FIXME: this is QWERTY keyboard specific.
             self.nrSymbol = ")!@#$%^&*("
@@ -504,14 +566,14 @@ init -1500 python in _editor:
             self.insert([alt])
 
         def get_suggestions(self):
+            global maxCharPerLine, maxLinesPerScreen
+            global Typo_Asc_Desc_Linegap_per_UPM, winAsc_winDesc_per_UPM
 
-            char_width = config.screen_width / 113.0
-            height_offs = 46.0
-            width_offs = 11
-            char_height = config.screen_height / 30.0
+            char_width = config.screen_width / maxCharPerLine
+            char_height = config.screen_height / maxLinesPerScreen
 
-            x = int(width_offs + self.console.cx * char_width)
-            y = int(height_offs + self.console.cy * char_height)
+            x = int(self.console.cx * char_width)
+            y = int((1.0 + self.console.cy) * char_height)
 
             suggestions = lang.candidates(self.get_selected())
             wordlen_max = max(map(lambda x: len(x), suggestions))
@@ -549,30 +611,30 @@ init -1500 python in _editor:
 
         def render(self, width, height, st, at):
             """ draw the cursor or the selection """
+            global maxCharPerLine, maxLinesPerScreen
+            global Typo_Asc_Desc_Linegap_per_UPM, winAsc_winDesc_per_UPM
             R = renpy.Render(width, height)
             C = R.canvas()
-            a = 0.96
-            b = 3
-            dx = width / 110
-            dy = height / 29
+            dx = width / maxCharPerLine
+            dy = height / maxLinesPerScreen
             selection = (16,16,16,255)
             if self.cy == self.CY:
                 if self.CX == self.cx:
-                    C.line((255,255,255,255),(self.cx*dx,self.cy*dy),(self.cx*dx, (self.cy+a)*dy + b))
+                    C.line((255,255,255,255),(self.cx*dx,self.cy*dy),(self.cx*dx, (self.cy+1.0)*dy))
                 else:
-                    C.rect(selection,(self.cx*dx, self.cy*dy, (self.CX-self.cx)*dx, a*dy + b))
+                    C.rect(selection,(self.cx*dx, self.cy*dy, (self.CX-self.cx)*dx, dy))
             elif self.cy < self.CY:
                 x = self.cx
                 for y in xrange(self.cy, self.CY):
-                    C.rect(selection, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, a*dy + b))
+                    C.rect(selection, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, dy))
                     x = 0
-                C.rect(selection, (0, self.CY*dy, self.CX*dx, a*dy + b))
+                C.rect(selection, (0, self.CY*dy, self.CX*dx, dy))
             else:
                 x = self.CX
                 for y in xrange(self.CY, self.cy):
-                    C.rect(selection, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, a*dy + b))
+                    C.rect(selection, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, dy))
                     x = 0
-                C.rect(selection, (0, self.cy*dy, self.cx*dx, a*dy + b))
+                C.rect(selection, (0, self.cy*dy, self.cx*dx, dy))
             return R
 
         def show_debug_messages(self, do_show):
@@ -580,9 +642,12 @@ init -1500 python in _editor:
             self.view.parse()
 
         def _screen_to_cursor_coordinates(self, x, y):
-            self.max = int(x * 113.3 / config.screen_width)
-            cy = int(y * 31.5 / config.screen_height)
+            global maxCharPerLine, maxLinesPerScreen
+            global Typo_Asc_Desc_Linegap_per_UPM, winAsc_winDesc_per_UPM
+            self.max = int(x * (maxCharPerLine + (1.0 / winAsc_winDesc_per_UPM)) / config.screen_width)
+            cy = int(y * (maxLinesPerScreen + (1.0 / winAsc_winDesc_per_UPM)) / config.screen_height)
 
+            # selection below displays screen caused this. FIXME: maybe scroll down if this happens?
             if cy >= self.view.nolines:
                 cy = self.view.nolines - 1
             return (min(self.max, len(self.view.wrapped_buffer[cy])), cy)
@@ -598,10 +663,9 @@ init -1500 python in _editor:
 
         def event(self, ev, x, y, st):
             import pygame
-            a = 0.96
-            b = 7
+            global Typo_Asc_Desc_Linegap_per_UPM, winAsc_winDesc_per_UPM
             if ev.type == pygame.MOUSEBUTTONDOWN:
-                self.cx, self.cy = self._screen_to_cursor_coordinates(x, y * a - b)
+                self.cx, self.cy = self._screen_to_cursor_coordinates(x, y / winAsc_winDesc_per_UPM)
                 if time.time() - self.timer < 0.5:
                     self.select_word()
                 else:
@@ -611,7 +675,7 @@ init -1500 python in _editor:
                 self.is_mouse_pressed = True
             if self.is_mouse_pressed and (ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP):
                 if ev.type == pygame.MOUSEMOTION:
-                    self.CX, self.CY = self._screen_to_cursor_coordinates(x, y * a - b)
+                    self.CX, self.CY = self._screen_to_cursor_coordinates(x, y / winAsc_winDesc_per_UPM)
                 renpy.redraw(self, 0)
                 if ev.type == pygame.MOUSEBUTTONUP:
                     self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
@@ -684,12 +748,6 @@ init 1701 python in _editor:
     style.default.hyperlink_functions = (hyperlink_styler_wrap, hyperlink_callback_wrap, None)
 
 
-style _editor_frame:
-        xpadding 10
-        ypadding 10
-        xpos 0
-        background "#272822"
-
 screen _editor_main:
     style_prefix "_editor"
     default editor = _editor.editor
@@ -758,9 +816,7 @@ screen _editor_main:
 
         hbox:
             style_prefix "quick"
-
-            xalign 0.5
-            yalign 1.0
+            align (0.5, 1.0)
             if view.data.changed:
                 if not renpy.parser.parse_errors:
                     textbutton _("Apply") action [Function(editor.exit, apply = True), Return()]
@@ -774,47 +830,4 @@ screen _editor_main:
                 textbutton _("No check") action Function(editor.set_spellcheck_modus)
             if _editor.spellcheck_modus == "No check":
                 textbutton _("Suggest") action Function(editor.set_spellcheck_modus)
-
-screen _editor_find:
-    default editor = _editor.editor
-    default view = editor.view
-    frame:
-        align (0.5, 0.5)
-        background AlphaMask(Image("gui/frame.png", gui.confirm_frame_borders), mask="#000a")
-        vbox:
-            align (0.4, 0.5)
-            text "Enter search string:\n":
-                size 20
-                color "#fff"
-
-            add Input(hover_color="#3399ff",size=28, color="#afa", default=view.search_string, changed=view.search_init, length=256)
-            hbox:
-                textbutton "OK":
-                    text_size 20
-                    text_color "#fff"
-                    action Function(view.search)
-                    keysym('K_RETURN', 'K_KP_ENTER')
-                textbutton "Cancel":
-                    text_size 20
-                    text_color "#fff"
-                    action Hide("_editor_find")
-                    keysym('K_ESCAPE')
-
-screen _editor_suggestions(coords, suggestion_area, alts):
-    frame:
-        padding (0, 0)
-        area suggestion_area
-        background "#111a"
-        vbox:
-            for alt in alts:
-                textbutton alt:
-                    padding (0, 0)
-                    minimum (0, 0)
-                    text_font "codeface/fonts/proggy-clean/ProggyClean.ttf"
-                    text_size gui.text_size
-                    text_color "#fff"
-                    text_hover_color "ff2"
-                    action Function(_editor.editor.view.replace, alt, coords)
-
-        key "K_ESCAPE" action Hide("_editor_suggestions")
 
