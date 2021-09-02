@@ -1,7 +1,6 @@
 init -1500 python:
 
     style.editor = Style(style.default)
-
     # must be monospace or need/add shadow
 
     style.error = Style(style.default)
@@ -269,13 +268,6 @@ init -1500 python in _editor:
             self.search_string = ""
             self.find_upstream = None
             self.find_downstream = None
-            self.word_candidates = []
-
-        def get_word_candidates(self):
-            return self.word_candidates
-
-        def set_word_candidates(self):
-            self.word_candidates = lang.candidates(self.get_selected())
 
         def get_selected(self):
             cx, cy, CX, CY, none_selected = self.ordered_cursor_coordinates()
@@ -529,6 +521,23 @@ init -1500 python in _editor:
             self.console.CY = coords[3]
             self.insert([alt])
 
+        def get_spelling_alternatives(self):
+
+            char_width = config.screen_width / 113.0
+            height_offs = 46.0
+            width_offs = 11
+            char_height = config.screen_height / 30.0
+
+            x = int(width_offs + self.console.cx * char_width)
+            y = int(height_offs + self.console.cy * char_height)
+
+            suggestions = lang.candidates(self.get_selected())
+            wordlen_max = max(map(lambda x: len(x), suggestions))
+            width = int(wordlen_max * char_width)
+            height = int(len(suggestions) * char_height)
+
+            return (self.ordered_cursor_coordinates(), (x, y, width, height), suggestions)
+
     class Editor(renpy.Displayable):
         def __init__(self, *a, **b):
             super(Editor, self).__init__(a, b)
@@ -638,20 +647,6 @@ init -1500 python in _editor:
             elif apply:
                 self.view.data.save()
 
-        def spelling_alt_area(self):
-            char_width = config.screen_width / 113.0
-            height_offs = 46.0
-            width_offs = 11
-            char_height = config.screen_height / 30.0
-
-            x = int(width_offs + self.view.console.cx * char_width)
-            y = int(height_offs + self.view.console.cy * char_height)
-
-            m = max(map(lambda x: len(x), self.view.word_candidates))
-            width = int(m * char_width)
-            height = int(len(self.view.get_word_candidates()) * char_height)
-
-            return (x, y, width, height)
 
         def set_spellcheck_modus(self):
             global spellcheck_modus
@@ -683,15 +678,8 @@ init 1701 python in _editor:
 
         if not renpy.get_screen("spelling_alternatives"):
             editor.select_word()
-            coords = editor.view.ordered_cursor_coordinates()
-
-            editor.view.set_word_candidates()
-            editor.view.console.CX = editor.view.console.cx
-            editor.view.console.CY = editor.view.console.cy
             editor.is_mouse_pressed = False
-            area = editor.spelling_alt_area()
-            alts = editor.view.get_word_candidates()
-            renpy.show_screen("spelling_alternatives", coords, area, alts)
+            renpy.show_screen("spelling_alternatives", *editor.view.get_spelling_alternatives())
             renpy.restart_interaction()
 
     style.default.hyperlink_functions = (hyperlink_styler_wrap, hyperlink_callback_wrap, None)
