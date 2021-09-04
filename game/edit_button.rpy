@@ -117,26 +117,24 @@ init -1500 python in _editor:
                     self._undo = self._undo[:self.at]
                 self._undo.append([what])
                 self.at += 1
-            elif self.mode == 1:
-                self.at -= 1
-                self._undo[self.at] = [what]
-                self.mode = 0
             else:
                 self._undo[self.at] = [what]
-                self.at += 1
-                self.mode = 0
 
         def undo(self, act_out):
             if self.at > 0 and self.at <= len(self._undo):
                 self.mode = 1
-                for act in reversed(self._undo[self.at-1]):
+                self.at -= 1
+                for act in reversed(self._undo[self.at]):
                     act_out(*act)
+                self.mode = 0
 
         def redo(self, act_out):
             if self.at < len(self._undo):
-                self.mode = 2
+                self.mode = 1
                 for act in reversed(self._undo[self.at]):
                     act_out(*act)
+                self.at += 1
+                self.mode = 0
 
     class ReadOnlyData(object):
         """ container and load interface for read only data """
