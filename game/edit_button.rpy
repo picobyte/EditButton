@@ -118,20 +118,24 @@ init -1500 python in _editor:
                 self._undo.append([what])
                 self.at += 1
             else:
-                self._undo[self.at] = [what]
+                self._undo[self.at].append(what)
 
         def undo(self, act_out):
             if self.at > 0 and self.at <= len(self._undo):
                 self.mode = 1
                 self.at -= 1
-                for act in reversed(self._undo[self.at]):
+                actions = reversed(self._undo[self.at])
+                self._undo[self.at] = []
+                for act in actions:
                     act_out(*act)
                 self.mode = 0
 
         def redo(self, act_out):
             if self.at < len(self._undo):
                 self.mode = 1
-                for act in reversed(self._undo[self.at]):
+                actions = reversed(self._undo[self.at])
+                self._undo[self.at] = []
+                for act in actions:
                     act_out(*act)
                 self.at += 1
                 self.mode = 0
