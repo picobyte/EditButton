@@ -106,11 +106,11 @@ init -1500 python in _editor:
     spellcheck_modus = "Suggest"
 
     class History(object):
-        def __init__(self): self.reset()
-        def reset(self):
+        def __init__(self):
             self._undo = []
             self.mode = 0
             self.at = 0
+
         def append(self, what):
             if self.mode == 0:
                 if self.at < len(self._undo):
