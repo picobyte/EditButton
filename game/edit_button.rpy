@@ -98,7 +98,6 @@ init -1500 python in _editor:
     import textwrap
     import time
 
-    import math
     from pygments import highlight
     from renpy_lexer import RenPyLexer
     from renpyformatter import RenPyFormatter
@@ -121,18 +120,21 @@ init -1500 python in _editor:
             elif self.mode == 1:
                 self.at -= 1
                 self._undo[self.at] = what
+                self.mode = 0
             else:
                 self._undo[self.at] = what
                 self.at += 1
-            self.mode = 0
-        def undo(self):
+                self.mode = 0
+
+        def undo(self, act_out):
             if self.at > 0 and self.at <= len(self._undo):
                 self.mode = 1
-                return self._undo[self.at-1]
-        def redo(self):
+                act_out(*self._undo[self.at-1])
+
+        def redo(self, act_out):
             if self.at < len(self._undo):
                 self.mode = 2
-                return self._undo[self.at]
+                act_out(*self._undo[self.at])
 
     class ReadOnlyData(object):
         """ container and load interface for read only data """
@@ -502,14 +504,10 @@ init -1500 python in _editor:
             self.rewrap()
 
         def ctrl_z(self):
-            act = self.data.history.undo()
-            if act:
-                self._act_out(*act)
+            self.data.history.undo(self._act_out)
 
         def ctrl_y(self):
-            act = self.data.history.redo()
-            if act:
-                self._act_out(*act)
+            self.data.history.redo(self._act_out)
 
         def search_init(self, search):
             self.search_string = search
