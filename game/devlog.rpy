@@ -21,13 +21,13 @@ init -100 python:
 
 
     # enable logging via the 'logging' module
-    logging.basicConfig(level=logging.DEBUG, format='%(levelname)-8s %(name)-15s %(message)s')
+    logging.basicConfig(level=logging.DEBUG, format='%(levelname)-8s%(message)s')
     devlog = logging.getLogger(" ".join([config.name, config.version]))
     devlogfile = logging.FileHandler(os.path.join(gamedir, "devlog.txt"))
     devlogfile.setLevel(logging.DEBUG)
     devlog.addHandler(devlogfile)
-    devlog.critical("\n--- launch game ---")
-    fm = logging.Formatter('%(levelname)-8s %(name)-15s %(message)s')
+    devlog.critical("\n--- launch ---")
+    fm = logging.Formatter('%(levelname)-8s%(message)s')
     devlogfile.setFormatter(fm)
     del fm
     devlog.info("Game directory: %s" % gamedir)

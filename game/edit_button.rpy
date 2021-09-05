@@ -13,7 +13,6 @@ init -1700 python  in _editor:
         Typo_Asc_Desc_Linegap_per_UPM = 1.0
         winAsc_winDesc_per_UPM = 0.820
 
-
     maxCharPerLine = 127.875 / Typo_Asc_Desc_Linegap_per_UPM
     maxLinesPerScreen = 30.5 / winAsc_winDesc_per_UPM
 
@@ -104,40 +103,69 @@ init -1500 python in _editor:
     lang = SpellChecker(language='en') # should also support ru, es, fr, pt and de
     spellcheck_modus = "Suggest"
 
+
     class History(object):
         def __init__(self):
-            self._undo = []
-            self.mode = 0
-            self.at = 0
+            # FIXME: could change elements to dicts with {line: {pre: state, post: state}}
+            # only insert is a bit harder.
+            self._undo = [{"sbc": [None, None, None]}]
+            self.rewrite_history = True # disable this while undoing / redoing
+            self.at = -1
+            self.changed = True
 
-        def append(self, what):
-            if self.mode == 0:
-                if self.at < len(self._undo):
-                    self._undo = self._undo[:self.at]
-                self._undo.append([what])
+        def update_cursor(self, editor):
+            """ cursor update triggers new history entry unless part of a combined edit action """
+            if len(self._undo[len(self._undo) - 1]) != 1:
+                if self.rewrite_history:
+                    self._undo = self._undo[:(self.at+1)]
+
+                self._undo.append({})
+            self._undo[len(self._undo) - 1]["sbc"] = [editor.view.lnr, editor.cx, editor.cy]
+
+        def append(self, func_ndx_key, args):
+            """ appends to history. also undo populates this, to allow redo """
+
+            if self.rewrite_history and (self.at == -1 or self.at < len(self._undo) - 2 or (self.at == len(self._undo) - 2)):
                 self.at += 1
-            else:
-                self._undo[self.at].append(what)
+                self._undo = self._undo[:(self.at+1)]
+                if len(self._undo[self.at]) > 1:
+                    self._undo[self.at] = {"sbc": self._undo[self.at-1]["sbc"]}
 
-        def undo(self, act_out):
-            if self.at > 0 and self.at <= len(self._undo):
-                self.mode = 1
+            if func_ndx_key not in self._undo[self.at]:
+                self._undo[self.at][func_ndx_key] = args
+            self.changed = True
+
+        def _undo_redo_helper(self, view):
+            action = self._undo[self.at]
+            self._undo[self.at] = {"sbc": [view.lnr, view.console.cx, view.console.cy]}
+            self.rewrite_history = False
+            for (fn, args) in action.items():
+                view.console.sbc(lnr=args[0], cx=args[1], cy=args[2]) if fn == "sbc" else view._act_out(fn[0], fn[1], *args)
+            self.rewrite_history = True
+
+        def undo(self, view):
+            if self.at >= 0:
+                if self.at == len(self._undo):
+                    self.at -= 1
+                if self.at != 0 and len(self._undo[self.at]) == 1:
+                    self.at -= 1
+                elif self.at == len(self._undo) - 1:
+                    self._undo.append({"sbc":[view.lnr, view.console.cx, view.console.cy]})
+                self._undo_redo_helper(view)
                 self.at -= 1
-                actions = reversed(self._undo[self.at])
-                self._undo[self.at] = []
-                for act in actions:
-                    act_out(*act)
-                self.mode = 0
 
-        def redo(self, act_out):
-            if self.at < len(self._undo):
-                self.mode = 1
-                actions = reversed(self._undo[self.at])
-                self._undo[self.at] = []
-                for act in actions:
-                    act_out(*act)
+        def redo(self, view):
+            if self.at < len(self._undo) - 1:
                 self.at += 1
-                self.mode = 0
+                self._undo_redo_helper(view)
+                #self.at += 1
+                if self.at == len(self._undo) - 1 and len(self._undo[self.at]) == 1:
+                    self.at += 1
+
+        def is_changed(self):
+            ret = self.changed
+            self.changed = False
+            return ret
 
     class ReadOnlyData(object):
         """ container and load interface for read only data """
@@ -166,7 +194,7 @@ init -1500 python in _editor:
 
         def __setitem__(self, ndx, value):
             if value != self.data[ndx]:
-                self.history.append(["__setitem__", ndx, self.data[ndx]])
+                self.history.append(("__setitem__", ndx), [self.data[ndx]])
                 self.data[ndx] = value
 
         def load(self, fname=None):
@@ -185,11 +213,11 @@ init -1500 python in _editor:
                 self.start_change = len(self.history._undo)
 
         def __delitem__(self, ndx):
-            self.history.append(["insert", ndx, self.data[ndx]])
+            self.history.append(("insert", ndx), [self.data[ndx]])
             del(self.data[ndx])
 
         def insert(self, ndx, value):
-            self.history.append(["__delitem__", ndx])
+            self.history.append(("__delitem__", ndx), [])
             self.data.insert(ndx, value)
 
     class RenPyData(ReadWriteData):
@@ -202,7 +230,7 @@ init -1500 python in _editor:
         def parse(self):
             """ If changes were not yet parsed, check for errors; create colored_buffer for view on screen """
             global spellcheck_modus
-            if self.history.at != self._last_parsed_changes:
+            if self.history.is_changed():
                 unknown_words = Set()
                 if spellcheck_modus != "No check":
                     for l in self.data:
@@ -219,7 +247,6 @@ init -1500 python in _editor:
                 for w in unknown_words:
                     for i in xrange(0, len(self.colored_buffer)):
                         self.colored_buffer[i] = re.sub(r'\b'+w+r'\b', r'{a=_spell:'+w+r'}'+w+r'{/a}', self.colored_buffer[i])
-                self._last_parsed_changes = self.history.at
 
     class TextView(object):
         """keeps track of horizontal position in text. Wrapping is not taken into account for position."""
@@ -280,7 +307,10 @@ init -1500 python in _editor:
                 if err:
                     self.show_errors = re.sub(r'(?<!\{)(\{(\{\{)*)(?!\{)', r'{\1', re.sub(r'(?<!\[)(\[(\[\[)*)(?!\[)', r'[\1', os.linesep.join(err)))
 
-        def UP(self, sub=1):
+        def UP(self, sub=1, new_history_entry=True):
+            if new_history_entry:
+                self.data.history.update_cursor(self.console)
+
             sub = min(self.console.cy + self.lnr, sub)
             cursor_movement = min(self.console.cy, sub)
             self.console.cy -= cursor_movement
@@ -288,7 +318,9 @@ init -1500 python in _editor:
             if cursor_movement == 0: # then view was moved
                 self.rewrap()
 
-        def DOWN(self, add=1):
+        def DOWN(self, add=1, new_history_entry=True):
+            if new_history_entry:
+                self.data.history.update_cursor(self.console)
             cursor_movement = min(self.nolines - self.console.cy - 1, add)
             add -= cursor_movement
             if cursor_movement:
@@ -308,11 +340,12 @@ init -1500 python in _editor:
         def PAGEDOWN(self):
             self.DOWN(self.nolines)
 
-        def PAGEUP(self): self.UP(self.nolines)
-        def PAGEDOWN(self): self.DOWN(self.nolines)
+        def ctrl_HOME(self):
+            self.data.history.update_cursor(self.console)
+            self.console.cy = self.lnr = 0
 
-        def ctrl_HOME(self): self.console.cy = self.lnr = 0
         def ctrl_END(self):
+            self.data.history.update_cursor(self.console)
             self.console.cy = self.nolines - 1
             self.lnr = len(self.data) - self.console.cy - 1
 
@@ -328,7 +361,7 @@ init -1500 python in _editor:
             self._add_km(['HOME', 'END'], ['shift_', ''])
             self._add_km(['LEFT', 'RIGHT'], ['shift_', 'ctrl_', 'ctrl_shift_', 'repeat_ctrl_shift_','', 'repeat_shift_', 'repeat_ctrl_', 'repeat_'])
             self._add_km(['UP', 'DOWN'], ['shift_', 'repeat_shift_'])
-            self.handlekey("END")
+            self.console.max = 0xffff
             # FIXME: this is QWERTY keyboard specific.
             self.nrSymbol = ")!@#$%^&*("
             self.oSymName = [ "BACKQUOTE", "MINUS", "EQUALS", "LEFTBRACKET", "RIGHTBRACKET",
@@ -352,13 +385,20 @@ init -1500 python in _editor:
                 sx = 0
             return copy+self.data[ey][sx:ex]
 
-        def LEFT(self, sub=1):
+        def LEFT(self, sub=1, new_history_entry=True):
+            if new_history_entry:
+                self.data.history.update_cursor(self.console)
+
             while self.console.cx < sub and self.wrap2buf[self.console.cy][0]:
                 sub -= self.console.cx + 1
                 self.UP()
                 self.console.cx = len(self.line)
             self.console.max = max(self.console.cx - sub, 0)
-        def RIGHT(self, add=1):
+
+        def RIGHT(self, add=1, new_history_entry=True):
+            if new_history_entry:
+                self.data.history.update_cursor(self.console)
+
             bx, by = self.wrap2buf[self.console.cy]
             while self.console.cx + add > len(self.line) and bx+self.console.cx <= len(self.data[self.lnr+by]):
                 add -= len(self.line) - self.console.cx + 1
@@ -379,8 +419,13 @@ init -1500 python in _editor:
             if m:
                 self.RIGHT(len(m.group(0)))
 
-        def HOME(self): self.console.max = 0
-        def END(self): self.console.max = 0xffff
+        def HOME(self):
+            self.data.history.update_cursor(self.console)
+            self.console.max = 0
+
+        def END(self):
+            self.data.history.update_cursor(self.console)
+            self.console.max = 0xffff
 
         def RETURN(self): self.insert(['',''])
 
@@ -388,9 +433,9 @@ init -1500 python in _editor:
             cons = self.console
             if cons.cx == cons.CX and cons.cy == cons.CY:
                 if cons.cx or self.wrap2buf[cons.cy][0]:
-                    self.LEFT()
+                    self.LEFT(new_history_entry=False)
                 elif self.lnr + cons.cy != 0:
-                    self.UP()
+                    self.UP(new_history_entry=False)
                     cons.max = len(self.line)
                 else:
                     return
@@ -422,11 +467,11 @@ init -1500 python in _editor:
             if cx > len(self.line):
                 # fix cursor placement if space was deleted causing a word at the end of the line to wrap to the next line
                 cx -= len(self.line) + 1
-                self.DOWN()
+                self.DOWN(new_history_entry=False)
             elif sx < self.wrap2buf[cy][0]:
                 # fix cursor placement when word at start of line was shortened and now wraps
                 dx = self.wrap2buf[cy][0] - sx
-                self.UP()
+                self.UP(new_history_entry=False)
                 cx = len(self.line) + 1 - dx
             self.console.max = self.console.cx = self.console.CX = cx
 
@@ -470,12 +515,12 @@ init -1500 python in _editor:
             if len(entries) <= 1 and cx + len(entries[0]) - self.wrap2buf[self.console.cy][0] < len(self.line):
                 self.console.cx = cx + len(entries[0])
             else:
-                self.UP()
+                self.UP(new_history_entry=False)
                 for e in entries:
-                    self.DOWN()
+                    self.DOWN(new_history_entry=False)
                     self.console.cx = cx + len(e)
                     while self.console.cx - self.wrap2buf[self.console.cy][0] > len(self.line):
-                        self.DOWN()
+                        self.DOWN(new_history_entry=False)
                         if not self.wrap2buf[self.console.cy][0]:
                             break
                     cx = 0
@@ -506,17 +551,19 @@ init -1500 python in _editor:
             self.parse()
             self.console.cy = self.console.CY = ndx - self.lnr
             if self.console.cy < 0:
-                self.UP(-self.console.cy)
+                self.UP(-self.console.cy, new_history_entry=False)
             elif self.console.cy >= self.nolines:
-                self.DOWN(self.console.cy-self.nolines-1)
+                self.DOWN(self.console.cy-self.nolines-1, new_history_entry=False)
             self.console.cx = self.console.CX = 0
             self.rewrap()
 
         def ctrl_z(self):
-            self.data.history.undo(self._act_out)
+            self.data.history.undo(self)
+            renpy.redraw(self.console, 0)
 
         def ctrl_y(self):
-            self.data.history.redo(self._act_out)
+            self.data.history.redo(self)
+            renpy.redraw(self.console, 0)
 
         def search_init(self, search):
             self.search_string = search
@@ -566,10 +613,7 @@ init -1500 python in _editor:
         def replace(self, alt, coords):
             if renpy.get_screen("_editor_suggestions"):
                 renpy.hide_screen("_editor_suggestions")
-            self.console.cx = coords[0]
-            self.console.cy = coords[1]
-            self.console.CX = coords[2]
-            self.console.CY = coords[3]
+            self.console.sbc(*coords)
             self.insert([alt])
 
         def get_suggestions(self):
@@ -659,6 +703,15 @@ init -1500 python in _editor:
                 cy = self.view.nolines - 1
             return (min(self.max, len(self.view.wrapped_buffer[cy])), cy)
 
+        def sbc(self, lnr=None, cx=None, cy=None, CX=None, CY=None):
+            """set buffer coordinates"""
+            self.view.lnr = self.view.lnr if lnr is None else lnr
+            self.cx = self.cx if cx is None else cx
+            self.cy = self.cy if cy is None else cy
+            self.CX = self.cx if CX is None else CX
+            self.CY = self.cy if CY is None else CY
+            self.view.rewrap()
+
         def select_word(self):
             bx, by = self.view.wrap2buf[self.cy]
             m = re.compile(r'\w*$').search(self.view.data[self.view.lnr+by][:bx+self.cx])
@@ -672,6 +725,7 @@ init -1500 python in _editor:
             import pygame
             global Typo_Asc_Desc_Linegap_per_UPM, winAsc_winDesc_per_UPM
             if ev.type == pygame.MOUSEBUTTONDOWN:
+                self.view.data.history.update_cursor(self)
                 self.cx, self.cy = self._screen_to_cursor_coordinates(x, y / winAsc_winDesc_per_UPM)
                 if time.time() - self.timer < 0.5:
                     self.select_word()
