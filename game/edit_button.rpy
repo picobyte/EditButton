@@ -748,6 +748,7 @@ init 1701 python in _editor:
 
         if not renpy.get_screen("_editor_suggestions"):
             editor.select_word()
+            renpy.redraw(editor, 0)
             editor.is_mouse_pressed = False
             renpy.show_screen("_editor_suggestions", *editor.view.get_suggestions())
             renpy.restart_interaction()
