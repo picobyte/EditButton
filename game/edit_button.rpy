@@ -299,6 +299,14 @@ init -1500 python in _editor:
                 while self.console.cy >= self.nolines:
                     self.console.cy -= 1
                     self.parse()
+            else:
+                 self.console.CY = self.console.cy
+
+        def PAGEUP(self):
+            self.UP(self.nolines)
+
+        def PAGEDOWN(self):
+            self.DOWN(self.nolines)
 
         def PAGEUP(self): self.UP(self.nolines)
         def PAGEDOWN(self): self.DOWN(self.nolines)
