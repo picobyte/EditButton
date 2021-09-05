@@ -130,6 +130,8 @@ init -1500 python in _editor:
                 self._undo = self._undo[:(self.at+1)]
                 if len(self._undo[self.at]) > 1:
                     self._undo[self.at] = {"sbc": self._undo[self.at-1]["sbc"]}
+            elif self.at == len(self._undo):
+                self._undo.append({"sbc": self._undo[self.at-1]["sbc"]})
 
             if func_ndx_key not in self._undo[self.at]:
                 self._undo[self.at][func_ndx_key] = args
