@@ -1,16 +1,15 @@
 init -1700 python  in _editor:
-    #from game/codeface/fonts/*/vertical_metrics.txt:
 
-    inconsolata = True
+    #font = "codeface/fonts/inconsolata/Inconsolata-Regular.ttf"
+    font = "codeface/fonts/proggy-clean/ProggyClean.ttf"
     fontsize = 34.0
-    if inconsolata:
-        font = "codeface/fonts/inconsolata/Inconsolata-Regular.ttf"
-        # vertical_metrics.txt: should be 1.049, both:
+    # trying to relate this to ratios from game/codeface/fonts/*/vertical_metrics.txt:
+    if "/Inconsolata-Regular.ttf" in font:
+        # 1.049, both (bottom of vertical_metrics file):
         Typo_Asc_Desc_Linegap_per_UPM = 1.135
         winAsc_winDesc_per_UPM = 1.0485
-    else:
-        font = "codeface/fonts/proggy-clean/ProggyClean.ttf"
-        # vertical_metrics.txt: first should be 1.0, other 0.8125:
+    elif "/ProggyClean.ttf" in font:
+        # first should be 1.0, other 0.8125:
         Typo_Asc_Desc_Linegap_per_UPM = 1.0
         winAsc_winDesc_per_UPM = 0.820
 
