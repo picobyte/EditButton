@@ -33,5 +33,5 @@ init -100 python:
     devlog.info("Game directory: %s" % gamedir)
 
     devlog = logging.getLogger(" ".join([config.name, config.version]))
+    _editor.devlog = devlog
 
-    #devlog.info("HERE")
