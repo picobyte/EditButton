@@ -293,14 +293,12 @@ init -1500 python in _editor:
             add -= cursor_movement
             if cursor_movement:
                 self.console.cy += cursor_movement
-            elif self.console.cy > add: # view movement
+            elif self.lnr + add < len(self.data): # view movement
                 self.lnr += add
                 self.rewrap()
                 while self.console.cy >= self.nolines:
                     self.console.cy -= 1
                     self.parse()
-            else:
-                 self.console.CY = self.console.cy
 
         def PAGEUP(self): self.UP(self.nolines)
         def PAGEDOWN(self): self.DOWN(self.nolines)
