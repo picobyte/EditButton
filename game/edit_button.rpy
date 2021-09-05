@@ -1,7 +1,7 @@
 init -1700 python  in _editor:
 
-    #font = "codeface/fonts/inconsolata/Inconsolata-Regular.ttf"
-    font = "codeface/fonts/proggy-clean/ProggyClean.ttf"
+    font = "codeface/fonts/inconsolata/Inconsolata-Regular.ttf"
+    #font = "codeface/fonts/proggy-clean/ProggyClean.ttf"
     fontsize = 34.0
     # trying to relate this to ratios from game/codeface/fonts/*/vertical_metrics.txt:
     if "/Inconsolata-Regular.ttf" in font:
