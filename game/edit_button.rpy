@@ -93,10 +93,6 @@ init -1500 python in _editor:
     import re
     from time import time
 
-    from renpy_lexer import RenPyLexer
-    from renpyformatter import RenPyFormatter
-    from spellchecker import SpellChecker
-    lang = SpellChecker(language='en') # should also support ru, es, fr, pt and de
 
 
     class History(object):
@@ -115,7 +111,8 @@ init -1500 python in _editor:
                     self._undo = self._undo[:(self.at+1)]
 
                 self._undo.append({})
-            self._undo[len(self._undo) - 1]["sbc"] = [editor.view.lnr, editor.cx, editor.cy]
+            if self._undo[len(self._undo) - 1]["sbc"][0] is None:
+                self._undo[len(self._undo) - 1]["sbc"] = editor.view.coords()
 
         def append(self, func_ndx_key, args):
             """ appends to history. also undo populates this, to allow redo """
@@ -135,11 +132,11 @@ init -1500 python in _editor:
         def _undo_redo_helper(self, view):
             from operator import itemgetter
             action = self._undo[self.at]
-            self._undo[self.at] = {"sbc": [view.lnr, view.console.cx, view.console.cy]}
+            self._undo[self.at] = {"sbc": view.coords()}
             self.rewrite_history = False
             for (fn, args) in sorted(action.items(), key=itemgetter(0)):
                 if fn == "sbc":
-                    view.console.sbc(lnr=args[0], cx=args[1], cy=args[2])
+                    view.console.sbc(*args)
                 else:
                     getattr(view.data, fn[0])(fn[1], *args)
             self.rewrite_history = True
@@ -153,7 +150,7 @@ init -1500 python in _editor:
                 if self.at != 0 and len(self._undo[self.at]) == 1:
                     self.at -= 1
                 elif self.at == len(self._undo) - 1:
-                    self._undo.append({"sbc":[view.lnr, view.console.cx, view.console.cy]})
+                    self._undo.append({"sbc": view.coords()})
                 self._undo_redo_helper(view)
                 self.at -= 1
 
@@ -161,7 +158,6 @@ init -1500 python in _editor:
             if self.at < len(self._undo) - 1:
                 self.at += 1
                 self._undo_redo_helper(view)
-                #self.at += 1
                 if self.at == len(self._undo) - 1 and len(self._undo[self.at]) == 1:
                     self.at += 1
 
@@ -233,9 +229,14 @@ init -1500 python in _editor:
 
     class RenPyData(ReadWriteData):
         def __init__(self, fname, format_style=None):
+            from renpy_lexer import RenPyLexer
+            from renpyformatter import RenPyFormatter
+            from spellchecker import SpellChecker
+
             super(RenPyData, self).__init__(fname)
             self.lexer = RenPyLexer(stripnl=False)
             self.formater = RenPyFormatter(style=format_style if format_style else 'monokai')
+            self.lang = SpellChecker(language='en') # should also support ru, es, fr, pt and de
             self._last_parsed_changes = None
             self.spellcheck_modus = "Suggest"
 
@@ -246,8 +247,8 @@ init -1500 python in _editor:
                 unknown_words = Set()
                 if self.spellcheck_modus != "No check":
                     for l in self.data:
-                        for w in lang.split_words(l):
-                            if w not in lang:
+                        for w in self.lang.split_words(l):
+                            if w not in self.lang:
                                unknown_words.add(w)
                 document = os.linesep.join(self.data)
                 renpy.parser.parse_errors = []
@@ -285,6 +286,9 @@ init -1500 python in _editor:
         @property
         def nolines(self):
             return len(self.wrapped_buffer)
+
+        def coords(self):
+            return [self.lnr, self.console.cx, self.console.cy]
 
         def rewrap(self):
             """ a copy of the buffer in view that is wrapped as shown in view """
@@ -623,7 +627,7 @@ init -1500 python in _editor:
             x = int(self.console.cx * char_width)
             y = int((1.0 + self.console.cy) * char_height)
 
-            suggestions = lang.candidates(self.get_selected())
+            suggestions = self.data.lang.candidates(self.get_selected())
             wordlen_max = max(map(lambda x: len(x), suggestions))
             width = int(wordlen_max * char_width)
             height = int(len(suggestions) * char_height)
