@@ -169,6 +169,7 @@ init -1500 python in _editor:
             self.changed = False
             return ret
 
+
     class ReadOnlyData(object):
         """ container and load interface for read only data """
         def __init__(self, fname): self.load(fname)
@@ -182,6 +183,7 @@ init -1500 python in _editor:
             fh = codecs.open(self.fname, encoding='utf-8')
             for line in fh:
                 self.data.append(line.rstrip(u"\r\n"))
+
 
     class ReadWriteData(ReadOnlyData):
         """ also allows edit and save """
@@ -221,6 +223,7 @@ init -1500 python in _editor:
         def insert(self, ndx, value):
             self.history.append(("__delitem__", ndx), [])
             self.data.insert(ndx, value)
+
 
     class RenPyData(ReadWriteData):
         def __init__(self, fname, format_style=None):
@@ -354,6 +357,7 @@ init -1500 python in _editor:
         def mousedown_4(self): self.UP(self.wheel_scroll_lines)
         def mousedown_5(self): self.DOWN(self.wheel_scroll_lines)
 
+
     class EditView(TextView):
 
         def __init__(self, **kwargs):
@@ -377,8 +381,8 @@ init -1500 python in _editor:
             self.find_downstream = None
 
         def get_selected(self):
-            cx, cy, CX, CY, none_selected = self.console.ordered_cursor_coordinates()
-            if none_selected:
+            cx, cy, CX, CY, selection = self.console.ordered_cursor_coordinates()
+            if not selection:
                 return ""
             sx, sy, ex, ey = self.cursor2buf_coords(cx, cy, CX, CY)
             copy = ""
@@ -444,17 +448,17 @@ init -1500 python in _editor:
                 cons.cx = cons.max
             self.DELETE()
 
-        def cursor2buf_coords(self, cx, cy, CX, CY, _none_selected=None):
+        def cursor2buf_coords(self, cx, cy, CX, CY, _selection=None):
             sx, sy = self.wrap2buf[cy]
             ex, ey = self.wrap2buf[CY]
             return (sx+cx, sy+self.lnr, ex+CX, ey+self.lnr)
 
         def DELETE(self):
-            cx, cy, CX, CY, none_selected = self.console.ordered_cursor_coordinates()
+            cx, cy, CX, CY, selection = self.console.ordered_cursor_coordinates()
             sx, sy, ex, ey = self.cursor2buf_coords(cx, cy, CX, CY)
 
-            if sx != len(self.data[sy]) or not none_selected:
-                ex += none_selected # then delete the one right of the cursor
+            if sx != len(self.data[sy]) or selection:
+                ex += 0 if selection else 1 # then delete the one right of the cursor
                 start = self.data[sy][:sx]
                 while sy != ey:
                     del self.data[sy]
@@ -494,7 +498,7 @@ init -1500 python in _editor:
             if entries == None: # paste in absences of entries
                 entries = pyperclip.paste().split(os.linesep)
 
-            cx, cy, CX, CY, none_selected = self.console.ordered_cursor_coordinates()
+            cx, cy, CX, CY, selection = self.console.ordered_cursor_coordinates()
 
             if cx != CX or cy != CY:
                 self.DELETE()
@@ -635,6 +639,7 @@ init -1500 python in _editor:
 
             return (self.console.ordered_cursor_coordinates(), (x, y, width, height), suggestions)
 
+
     class Editor(renpy.Displayable):
         def __init__(self, *a, **b):
             super(Editor, self).__init__(a, b)
@@ -649,7 +654,7 @@ init -1500 python in _editor:
             cx, cy = self.cx, self.cy
             CX, CY = self.CX, self.CY
 
-            none_selected = 0
+            selection = True
 
             if cy > CY:
                 cy, CY = CY, cy
@@ -659,8 +664,8 @@ init -1500 python in _editor:
                 if cx > CX:
                     cx, CX = CX, cx
                 elif cx == CX:
-                    none_selected = 1
-            return (cx, cy, CX, CY, none_selected)
+                    selection = False
+            return (cx, cy, CX, CY, selection)
 
         def render(self, width, height, st, at):
             """ draw the cursor or the selection """
