@@ -95,6 +95,7 @@ init -1500 python in _editor:
     import codecs
     import textwrap
     import time
+    import operator
 
     from pygments import highlight
     from renpy_lexer import RenPyLexer
@@ -141,8 +142,11 @@ init -1500 python in _editor:
             action = self._undo[self.at]
             self._undo[self.at] = {"sbc": [view.lnr, view.console.cx, view.console.cy]}
             self.rewrite_history = False
-            for (fn, args) in action.items():
-                view.console.sbc(lnr=args[0], cx=args[1], cy=args[2]) if fn == "sbc" else view._act_out(fn[0], fn[1], *args)
+            for (fn, args) in sorted(action.items(), key=operator.itemgetter(0)):
+                if fn == "sbc":
+                    view.console.sbc(lnr=args[0], cx=args[1], cy=args[2])
+                else:
+                    view._act_out(fn[0], fn[1], *args)
             self.rewrite_history = True
 
         def undo(self, view):
@@ -217,12 +221,17 @@ init -1500 python in _editor:
                 self.start_change = len(self.history._undo)
 
         def __delitem__(self, ndx):
-            self.history.append(("insert", ndx), [self.data[ndx]])
+            k = ("insert", (ndx.start, ndx.stop)) if isinstance(ndx, slice) else ("insert", ndx)
+            ndx = slice(*ndx) if isinstance(ndx, tuple) else ndx
+            self.history.append(k, [self.data[ndx]])
             del(self.data[ndx])
 
         def insert(self, ndx, value):
             self.history.append(("__delitem__", ndx), [])
-            self.data.insert(ndx, value)
+            if isinstance(ndx, tuple):
+                self.data[ndx[0]:ndx[0]] = value
+            else:
+                self.data.insert(ndx, value)
 
 
     class RenPyData(ReadWriteData):
@@ -460,9 +469,7 @@ init -1500 python in _editor:
             if sx != len(self.data[sy]) or selection:
                 ex += 0 if selection else 1 # then delete the one right of the cursor
                 start = self.data[sy][:sx]
-                while sy != ey:
-                    del self.data[sy]
-                    ey -= 1
+                del self.data[sy:ey]
                 self.data[sy] = start + self.data[sy][ex:]
             elif sy < len(self.data) - 1:
                 self.console.max = len(self.data[sy])
@@ -555,7 +562,7 @@ init -1500 python in _editor:
             """ handle undo/redo. Also makes sure the action remains in view """
             getattr(self.data, func)(ndx, *args)
             self.parse()
-            self.console.cy = self.console.CY = ndx - self.lnr
+            self.console.cy = self.console.CY = (ndx[0] if isinstance(ndx, tuple) else ndx) - self.lnr
             if self.console.cy < 0:
                 self.UP(-self.console.cy, new_history_entry=False)
             elif self.console.cy >= self.nolines:
