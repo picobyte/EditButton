@@ -146,8 +146,10 @@ init -1500 python in _editor:
                 if fn == "sbc":
                     view.console.sbc(lnr=args[0], cx=args[1], cy=args[2])
                 else:
-                    view._act_out(fn[0], fn[1], *args)
+                    getattr(view.data, fn[0])(fn[1], *args)
             self.rewrite_history = True
+            view.parse()
+            renpy.redraw(view.console, 0)
 
         def undo(self, view):
             if self.at >= 0:
@@ -558,25 +560,11 @@ init -1500 python in _editor:
             ll = min(self.lnr + self.cbuflines, len(self.data))
             return self.colorize(os.linesep.join(self.data.colored_buffer[self.lnr:ll]), self.lnr != 0, ll != len(self.data))
 
-        def _act_out(self, func, ndx, *args):
-            """ handle undo/redo. Also makes sure the action remains in view """
-            getattr(self.data, func)(ndx, *args)
-            self.parse()
-            self.console.cy = self.console.CY = (ndx[0] if isinstance(ndx, tuple) else ndx) - self.lnr
-            if self.console.cy < 0:
-                self.UP(-self.console.cy, new_history_entry=False)
-            elif self.console.cy >= self.nolines:
-                self.DOWN(self.console.cy-self.nolines-1, new_history_entry=False)
-            self.console.cx = self.console.CX = 0
-            self.rewrap()
-
         def ctrl_z(self):
             self.data.history.undo(self)
-            renpy.redraw(self.console, 0)
 
         def ctrl_y(self):
             self.data.history.redo(self)
-            renpy.redraw(self.console, 0)
 
         def search_init(self, search):
             self.search_string = search
