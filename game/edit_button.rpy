@@ -111,8 +111,9 @@ init -1500 python in _editor:
                     self._undo = self._undo[:(self.at+1)]
 
                 self._undo.append({})
-            if self._undo[len(self._undo) - 1]["sbc"][0] is None:
-                self._undo[len(self._undo) - 1]["sbc"] = editor.view.coords()
+            last = len(self._undo) - 1
+            if not "sbc" in self._undo[last] or self._undo[last]["sbc"][0] is None:
+                self._undo[last]["sbc"] = editor.view.coords()
 
         def append(self, func_ndx_key, args):
             """ appends to history. also undo populates this, to allow redo """
