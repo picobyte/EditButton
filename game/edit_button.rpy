@@ -89,20 +89,14 @@ screen _editor_suggestions(coords, suggestion_area, alts):
 
 init -1500 python in _editor:
     from store import config, style
-    import store
     import os
     import re
-    import codecs
-    import textwrap
-    import time
-    import operator
+    from time import time
 
-    from pygments import highlight
     from renpy_lexer import RenPyLexer
     from renpyformatter import RenPyFormatter
     from spellchecker import SpellChecker
     lang = SpellChecker(language='en') # should also support ru, es, fr, pt and de
-    spellcheck_modus = "Suggest"
 
 
     class History(object):
@@ -139,10 +133,11 @@ init -1500 python in _editor:
             self.changed = True
 
         def _undo_redo_helper(self, view):
+            from operator import itemgetter
             action = self._undo[self.at]
             self._undo[self.at] = {"sbc": [view.lnr, view.console.cx, view.console.cy]}
             self.rewrite_history = False
-            for (fn, args) in sorted(action.items(), key=operator.itemgetter(0)):
+            for (fn, args) in sorted(action.items(), key=itemgetter(0)):
                 if fn == "sbc":
                     view.console.sbc(lnr=args[0], cx=args[1], cy=args[2])
                 else:
@@ -183,11 +178,11 @@ init -1500 python in _editor:
         def __len__(self): return len(self.data)
 
         def load(self, fname=None):
+            from codecs import open as open_codecs
             if fname is not None:
                 self.fname = fname
             self.data = []
-            fh = codecs.open(self.fname, encoding='utf-8')
-            for line in fh:
+            for line in open_codecs(self.fname, encoding='utf-8'):
                 self.data.append(line.rstrip(u"\r\n"))
 
 
@@ -212,14 +207,14 @@ init -1500 python in _editor:
             self.history = History()
 
         def save(self):
-            import shutil
+            from shutil import move
             from tempfile import mkstemp
             if self.changed:
                 fh, abs_path = mkstemp()
                 for line in self.data:
                     os.write(fh, line + os.linesep)
                 os.close(fh)
-                shutil.move(abs_path, self.fname)
+                move(abs_path, self.fname)
                 self.start_change = len(self.history._undo)
 
         def __delitem__(self, ndx):
@@ -242,13 +237,14 @@ init -1500 python in _editor:
             self.lexer = RenPyLexer(stripnl=False)
             self.formater = RenPyFormatter(style=format_style if format_style else 'monokai')
             self._last_parsed_changes = None
+            self.spellcheck_modus = "Suggest"
 
-        def parse(self):
+        def parse(self, force=False):
             """ If changes were not yet parsed, check for errors; create colored_buffer for view on screen """
-            global spellcheck_modus
-            if self.history.is_changed():
+            from pygments import highlight
+            if self.history.is_changed() or force:
                 unknown_words = Set()
-                if spellcheck_modus != "No check":
+                if self.spellcheck_modus != "No check":
                     for l in self.data:
                         for w in lang.split_words(l):
                             if w not in lang:
@@ -314,8 +310,8 @@ init -1500 python in _editor:
                 if offs != len(line):
                     renpy.error(os.linesep.join(["rewrap() discrepancy", line, str(offs), str(len(line)), str(wrap)]))
 
-        def parse(self):
-            self.data.parse()
+        def parse(self, force=False):
+            self.data.parse(force)
             self.rewrap()
             if self.show_errors is not None:
                 err = renpy.parser.parse_errors
@@ -641,7 +637,7 @@ init -1500 python in _editor:
             self.fl = {}
             self.fname = None
             self.view = None
-            self.timer = time.time()
+            self.timer = time()
             self.is_mouse_pressed = False
             self.exit() # sets is_visible and cursor coords to default
 
@@ -729,10 +725,10 @@ init -1500 python in _editor:
             if ev.type == pygame.MOUSEBUTTONDOWN:
                 self.view.data.history.update_cursor(self)
                 self.cx, self.cy = self._screen_to_cursor_coordinates(x, y / winAsc_winDesc_per_UPM)
-                if time.time() - self.timer < 0.5:
+                if time() - self.timer < 0.5:
                     self.select_word()
                 else:
-                    self.timer = time.time()
+                    self.timer = time()
                     self.CX, self.CY = self.cx, self.cy
                 renpy.redraw(self, 0)
                 self.is_mouse_pressed = True
@@ -775,14 +771,13 @@ init -1500 python in _editor:
 
 
         def set_spellcheck_modus(self):
-            global spellcheck_modus
-            if spellcheck_modus == "No check":
-                spellcheck_modus = "Suggest"
+            if self.view.data.spellcheck_modus == "No check":
+                self.view.data.spellcheck_modus = "Suggest"
                 renpy.hide_screen("_editor_suggestions")
             else:
-                spellcheck_modus = "No check"
+                self.view.data.spellcheck_modus = "No check"
             self.view.data._last_parsed_changes = None
-            self.view.parse()
+            self.view.parse(force=True)
             renpy.redraw(self, 0)
 
     editor = Editor()
@@ -890,8 +885,8 @@ screen _editor_main:
                     textbutton _("Hide") action Function(editor.show_debug_messages, False)
                 textbutton _("Cancel") action [Function(editor.exit, discard = True), Return()]
             textbutton _("Visual") action [Function(editor.exit), Return()]
-            if _editor.spellcheck_modus == "Suggest":
+            if view.data.spellcheck_modus == "Suggest":
                 textbutton _("No check") action Function(editor.set_spellcheck_modus)
-            if _editor.spellcheck_modus == "No check":
+            if view.data.spellcheck_modus == "No check":
                 textbutton _("Suggest") action Function(editor.set_spellcheck_modus)
 
