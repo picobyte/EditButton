@@ -652,8 +652,7 @@ init -1700 python in _editor:
                 if ev.type == pygame.MOUSEBUTTONUP:
                     self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
                     self.is_mouse_pressed = False
-            if renpy.get_screen("_editor_menu", layer="transient"):
-                renpy.hide_screen("_editor_menu", layer="transient")
+            hide_all_screens_with_name("_editor_menu")
 
         def start(self, ctxt, offset=2):
             (fname, lnr) = ctxt
@@ -716,6 +715,10 @@ init 1701 python in _editor:
             renpy.show_screen("_editor_menu", *editor.view.get_suggestions(), layer="transient")
             renpy.restart_interaction()
 
+    def hide_all_screens_with_name(name):
+        while renpy.get_screen(name):
+            renpy.hide_screen(name)
+
     style.default.hyperlink_functions = (hyperlink_styler_wrap, hyperlink_callback_wrap, None)
 
 init 1702:
@@ -753,7 +756,7 @@ init 1702:
         hover_color "ff2"
 
 
-screen _editor_find:
+screen _editor_find(layer="overlay"):
     default editor = _editor.editor
     default view = editor.view
     frame:
@@ -773,7 +776,7 @@ screen _editor_find:
                     keysym('K_RETURN', 'K_KP_ENTER')
                 textbutton "Cancel":
                     text_style "_editor_textbutton"
-                    action Hide("_editor_find")
+                    action Hide("_editor_find", layer=layer)
                     keysym('K_ESCAPE')
 
 
@@ -852,10 +855,10 @@ screen _editor_main:
         key "K_KP_EQUALS" action Function(view.insert, ["="])
 
         if renpy.get_screen("_editor_menu"):
-            key 'mousedown_1' action Hide("_editor_menu")
+            key 'mousedown_1' action Function(_editor.hide_all_screens_with_name, "_editor_menu")
 
         if renpy.get_screen("_editor_find"):
-            key 'mousedown_1' action Hide("_editor_menu")
+            key 'mousedown_1' action Hide("_editor_find")
 
         hbox:
             style_prefix "quick"
