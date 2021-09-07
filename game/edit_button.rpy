@@ -529,12 +529,6 @@ init -1700 python in _editor:
                 self.RIGHT(m.end()-m.start())
                 renpy.redraw(self.console, 0)
 
-        def replace(self, alt, coords):
-            if renpy.get_screen("_editor_suggestions"):
-                renpy.hide_screen("_editor_suggestions")
-            self.console.sbc(*coords)
-            self.insert([alt])
-
         def get_suggestions(self):
             char_width = config.screen_width / self.maxCharPerLine
             char_height = config.screen_height / self.maxLinesPerScreen
@@ -546,8 +540,14 @@ init -1700 python in _editor:
             wordlen_max = max(map(lambda x: len(x), suggestions))
             width = int(wordlen_max * char_width)
             height = int(len(suggestions) * char_height)
+            coords = self.console.ordered_cursor_coordinates()
 
-            return (self.console.ordered_cursor_coordinates(), (x, y, width, height), suggestions)
+            def replace_with_suggestion(self, choice, layer):
+                renpy.hide_screen("_editor_menu", layer=layer)
+                self.console.sbc(*coords)
+                self.insert([choice])
+
+            return ((x, y, width, height), suggestions, replace_with_suggestion)
 
 
     class Editor(renpy.Displayable):
@@ -652,8 +652,8 @@ init -1700 python in _editor:
                 if ev.type == pygame.MOUSEBUTTONUP:
                     self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
                     self.is_mouse_pressed = False
-            if renpy.get_screen("_editor_suggestions"):
-                renpy.hide_screen("_editor_suggestions")
+            if renpy.get_screen("_editor_menu", layer="transient"):
+                renpy.hide_screen("_editor_menu", layer="transient")
 
         def start(self, ctxt, offset=2):
             (fname, lnr) = ctxt
@@ -686,7 +686,7 @@ init -1700 python in _editor:
         def set_spellcheck_modus(self):
             if self.view.data.spellcheck_modus == "No check":
                 self.view.data.spellcheck_modus = "Suggest"
-                renpy.hide_screen("_editor_suggestions")
+                renpy.hide_screen("_editor_menu", layer="transient")
             else:
                 self.view.data.spellcheck_modus = "No check"
             self.view.data._last_parsed_changes = None
@@ -709,11 +709,11 @@ init 1701 python in _editor:
         if len(target) <= 7 or target[0:7] != "_spell:":
             return hyperlink_callback(target)
 
-        if not renpy.get_screen("_editor_suggestions"):
+        if not renpy.get_screen("_editor_menu", layer="transient"):
             editor.select_word()
             renpy.redraw(editor, 0)
             editor.is_mouse_pressed = False
-            renpy.show_screen("_editor_suggestions", *editor.view.get_suggestions())
+            renpy.show_screen("_editor_menu", *editor.view.get_suggestions(), layer="transient")
             renpy.restart_interaction()
 
     style.default.hyperlink_functions = (hyperlink_styler_wrap, hyperlink_callback_wrap, None)
@@ -777,19 +777,19 @@ screen _editor_find:
                     keysym('K_ESCAPE')
 
 
-screen _editor_suggestions(coords, suggestion_area, alts):
+screen _editor_menu(choice_area, choices, handler, layer="transient"):
     style_prefix "_editor_suggestion"
     frame:
-        area suggestion_area
+        area choice_area
         vbox:
-            for alt in alts:
-                textbutton alt:
+            for choice in choices:
+                textbutton choice:
                     padding (0, 0)
                     minimum (0, 0)
                     text_style "_editor_textbutton"
-                    action Function(_editor.editor.view.replace, alt, coords)
+                    action Function(handler, choice, layer)
 
-        key "K_ESCAPE" action Hide("_editor_suggestions")
+        key "K_ESCAPE" action Hide("_editor_menu", _layer=layer)
 
 
 screen _editor_main:
@@ -797,7 +797,6 @@ screen _editor_main:
     default editor = _editor.editor
     default view = editor.view
     frame:
-
         add editor
         text view.display() style "_editor"
         if view.show_errors:
@@ -852,11 +851,11 @@ screen _editor_main:
         key "K_KP_PLUS" action Function(view.insert, ["+"])
         key "K_KP_EQUALS" action Function(view.insert, ["="])
 
-        if renpy.get_screen("_editor_suggestions"):
-            key 'mousedown_1' action Hide("_editor_suggestions")
+        if renpy.get_screen("_editor_menu"):
+            key 'mousedown_1' action Hide("_editor_menu")
 
         if renpy.get_screen("_editor_find"):
-            key 'mousedown_1' action Hide("_editor_suggestions")
+            key 'mousedown_1' action Hide("_editor_menu")
 
         hbox:
             style_prefix "quick"
