@@ -2,20 +2,19 @@ init -1700 python  in _editor:
 
     font = "codeface/fonts/inconsolata/Inconsolata-Regular.ttf"
     #font = "codeface/fonts/proggy-clean/ProggyClean.ttf"
-    fontsize = 34.0
-    # trying to relate this to ratios from game/codeface/fonts/*/vertical_metrics.txt:
-    if "/Inconsolata-Regular.ttf" in font:
-        # 1.049, both (bottom of vertical_metrics file):
-        Typo_Asc_Desc_Linegap_per_UPM = 1.135
-        winAsc_winDesc_per_UPM = 1.0485
+    fontsize = 28
+    if "/Inconsolata-Regular.ttf" in font: # defined as 1.0
+        font_w_ratio = 1.0
+        font_h_ratio = 1.0
     elif "/ProggyClean.ttf" in font:
-        # first should be 1.0, other 0.8125:
-        Typo_Asc_Desc_Linegap_per_UPM = 1.0
-        winAsc_winDesc_per_UPM = 0.820
+        font_w_ratio = 1.166
+        font_h_ratio = 1.233
+    # any mono font should be implementable, but requires font_w_ratio and font_h_ratio tweaking.
+    # adjust font_h_ratio until selection shadows lines vertically, if shadow is too early, decrease ratio
+    # adjust font_w_ratio until selection shadows a line entirely, if shadow is too short, decrease ratio
 
-    maxCharPerLine = 127.875 / Typo_Asc_Desc_Linegap_per_UPM
-    maxLinesPerScreen = 30.5 / winAsc_winDesc_per_UPM
-
+    maxCharPerLine = font_w_ratio * 3840.545 / fontsize
+    maxLinesPerScreen = font_h_ratio * 2.3 + font_h_ratio * 912.0 / fontsize
 init:
     style _editor:
         # must be monospace or need/add shadow
@@ -266,9 +265,7 @@ init -1500 python in _editor:
         """keeps track of horizontal position in text. Wrapping is not taken into account for position."""
         wheel_scroll_lines = 3
         def __init__(self, console, data, nolines=None, lnr=0, wheel_scroll_lines=None):
-            global fontsize
-            global maxCharPerLine, maxLinesPerScreen
-            global Typo_Asc_Desc_Linegap_per_UPM, winAsc_winDesc_per_UPM
+            global maxLinesPerScreen
             self.data = data
             self.lnr = lnr
             self.show_errors = ""
@@ -620,7 +617,6 @@ init -1500 python in _editor:
 
         def get_suggestions(self):
             global maxCharPerLine, maxLinesPerScreen
-            global Typo_Asc_Desc_Linegap_per_UPM, winAsc_winDesc_per_UPM
 
             char_width = config.screen_width / maxCharPerLine
             char_height = config.screen_height / maxLinesPerScreen
@@ -666,7 +662,6 @@ init -1500 python in _editor:
         def render(self, width, height, st, at):
             """ draw the cursor or the selection """
             global maxCharPerLine, maxLinesPerScreen
-            global Typo_Asc_Desc_Linegap_per_UPM, winAsc_winDesc_per_UPM
             R = renpy.Render(width, height)
             C = R.canvas()
             dx = width / maxCharPerLine
@@ -697,11 +692,9 @@ init -1500 python in _editor:
 
         def _screen_to_cursor_coordinates(self, x, y):
             global maxCharPerLine, maxLinesPerScreen
-            global Typo_Asc_Desc_Linegap_per_UPM, winAsc_winDesc_per_UPM
-            self.max = int(x * (maxCharPerLine + (1.0 / winAsc_winDesc_per_UPM)) / config.screen_width)
-            cy = int(y * (maxLinesPerScreen + (1.0 / winAsc_winDesc_per_UPM)) / config.screen_height)
+            self.max = int(x * maxCharPerLine / config.screen_width)
+            cy = int(y * maxLinesPerScreen / config.screen_height)
 
-            # selection below displays screen caused this. FIXME: maybe scroll down if this happens?
             if cy >= self.view.nolines:
                 cy = self.view.nolines - 1
             return (min(self.max, len(self.view.wrapped_buffer[cy])), cy)
@@ -726,10 +719,9 @@ init -1500 python in _editor:
 
         def event(self, ev, x, y, st):
             import pygame
-            global Typo_Asc_Desc_Linegap_per_UPM, winAsc_winDesc_per_UPM
             if ev.type == pygame.MOUSEBUTTONDOWN:
                 self.view.data.history.update_cursor(self)
-                self.cx, self.cy = self._screen_to_cursor_coordinates(x, y / winAsc_winDesc_per_UPM)
+                self.cx, self.cy = self._screen_to_cursor_coordinates(x, y)
                 if time() - self.timer < 0.5:
                     self.select_word()
                 else:
@@ -739,7 +731,7 @@ init -1500 python in _editor:
                 self.is_mouse_pressed = True
             if self.is_mouse_pressed and (ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP):
                 if ev.type == pygame.MOUSEMOTION:
-                    self.CX, self.CY = self._screen_to_cursor_coordinates(x, y / winAsc_winDesc_per_UPM)
+                    self.CX, self.CY = self._screen_to_cursor_coordinates(x, y)
                 renpy.redraw(self, 0)
                 if ev.type == pygame.MOUSEBUTTONUP:
                     self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
