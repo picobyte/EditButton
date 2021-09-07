@@ -1,97 +1,16 @@
-init -1700 python  in _editor:
-
-    font = "codeface/fonts/inconsolata/Inconsolata-Regular.ttf"
-    #font = "codeface/fonts/proggy-clean/ProggyClean.ttf"
-    fontsize = 28
-    if "/Inconsolata-Regular.ttf" in font: # defined as 1.0
-        font_w_ratio = 1.0
-        font_h_ratio = 1.0
-    elif "/ProggyClean.ttf" in font:
-        font_w_ratio = 1.166
-        font_h_ratio = 1.233
-    # any mono font should be implementable, but requires font_w_ratio and font_h_ratio tweaking.
-    # adjust font_h_ratio until selection shadows lines vertically, if shadow is too early, decrease ratio
-    # adjust font_w_ratio until selection shadows a line entirely, if shadow is too short, decrease ratio
-
-    maxCharPerLine = font_w_ratio * 3840.545 / fontsize
-    maxLinesPerScreen = font_h_ratio * 2.3 + font_h_ratio * 912.0 / fontsize
-init:
-    style _editor:
-        # must be monospace or need/add shadow
-        font _editor.font
-        size _editor.fontsize #gui.text_size
-
-    style _editor_frame:
-        padding (0, 0)
-        pos (0, 0)
-        background "#272822"
-
-    style _editor_window:
-        align (0.5, 1.0)
-        background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
-
-    style _editor_error is _editor:
-        size int(_editor.fontsize * 0.80)
-        color "#d00"
-        hover_color "#f11"
-        hover_underline True
-
-    style _editor_search is _editor:
-        align (0.5, 0.5)
-        background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
-        padding gui.namebox_borders.padding
-
-    style _editor_suggestion_frame:
-        padding (0, 0)
-        background "#111a"
-
-    style _editor_textbutton is _editor:
-        color "#fff"
-        hover_color "ff2"
-
-screen _editor_find:
-    default editor = _editor.editor
-    default view = editor.view
-    frame:
-        align (0.5, 0.5)
-        background AlphaMask(Image("gui/frame.png", gui.confirm_frame_borders), mask="#000a")
-        vbox:
-            align (0.4, 0.5)
-            text "Enter search string:\n":
-                size 20
-                color "#fff"
-
-            add Input(hover_color="#3399ff",size=28, color="#afa", default=view.search_string, changed=view.search_init, length=256)
-            hbox:
-                textbutton "OK":
-                    text_style "_editor_textbutton"
-                    action Function(view.search)
-                    keysym('K_RETURN', 'K_KP_ENTER')
-                textbutton "Cancel":
-                    text_style "_editor_textbutton"
-                    action Hide("_editor_find")
-                    keysym('K_ESCAPE')
-
-screen _editor_suggestions(coords, suggestion_area, alts):
-    style_prefix "_editor_suggestion"
-    frame:
-        area suggestion_area
-        vbox:
-            for alt in alts:
-                textbutton alt:
-                    padding (0, 0)
-                    minimum (0, 0)
-                    text_style "_editor_textbutton"
-                    action Function(_editor.editor.view.replace, alt, coords)
-
-        key "K_ESCAPE" action Hide("_editor_suggestions")
-
-init -1500 python in _editor:
+init -1700 python in _editor:
     from store import config, style
     import os
     import re
     from time import time
 
+    # any mono font should be implementable, but requires tweaking the two ratios.
+    # adjust 1st ratio until selection shadows lines vertically, if shadow is too early, decrease ratio
+    # adjust 2nd ratio until selection shadows a line entirely, if shadow is too short, decrease ratio
+    fonts = {"Inconsolata-Regular": ("codeface/fonts/inconsolata", 1.0, 1.0),
+             "ProggyClean": ("codeface/fonts/proggy-clean", 1.166, 1.233)}
+    font = "Inconsolata-Regular"
+    fontsize = 28
 
 
     class History(object):
@@ -265,17 +184,19 @@ init -1500 python in _editor:
         """keeps track of horizontal position in text. Wrapping is not taken into account for position."""
         wheel_scroll_lines = 3
         def __init__(self, console, data, nolines=None, lnr=0, wheel_scroll_lines=None):
-            global maxLinesPerScreen
+            global fonts, font, fontsize
             self.data = data
             self.lnr = lnr
+            self.console = console
+            self.maxCharPerLine = fonts[font][1] * 3840.545 / fontsize
+            self.maxLinesPerScreen = fonts[font][2] * (2.3 + 912.0 / fontsize)
+            self._maxlines = int(self.maxLinesPerScreen)
+            self.cbuflines = self._maxlines
             self.show_errors = ""
             self.keymap = set(['mousedown_4', 'mousedown_5'])
-            self._maxlines = int(maxLinesPerScreen)
-            self.parse()
             self._add_km(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['repeat_', ''])
             self._add_km(['HOME', 'END'], ['ctrl_'])
-            self.console = console
-            self.cbuflines = self._maxlines
+            self.parse()
 
         def _add_km(self, km, mod): self.keymap.update([m+'K_'+k for k in km for m in mod])
 
@@ -290,13 +211,12 @@ init -1500 python in _editor:
 
         def rewrap(self):
             """ a copy of the buffer in view that is wrapped as shown in view """
-            global maxCharPerLine
             self.wrapped_buffer = []
             self.wrap2buf = {}
             atline = 0
             tot = 0
             for line in self.data[self.lnr:min(self.lnr + self._maxlines, len(self.data))]:
-                wrap = renpy.text.extras.textwrap(line, maxCharPerLine) or ['']
+                wrap = renpy.text.extras.textwrap(line, self.maxCharPerLine) or ['']
 
                 offs = 0
                 for l in wrap:
@@ -616,10 +536,8 @@ init -1500 python in _editor:
             self.insert([alt])
 
         def get_suggestions(self):
-            global maxCharPerLine, maxLinesPerScreen
-
-            char_width = config.screen_width / maxCharPerLine
-            char_height = config.screen_height / maxLinesPerScreen
+            char_width = config.screen_width / self.maxCharPerLine
+            char_height = config.screen_height / self.maxLinesPerScreen
 
             x = int(self.console.cx * char_width)
             y = int((1.0 + self.console.cy) * char_height)
@@ -661,11 +579,10 @@ init -1500 python in _editor:
 
         def render(self, width, height, st, at):
             """ draw the cursor or the selection """
-            global maxCharPerLine, maxLinesPerScreen
             R = renpy.Render(width, height)
             C = R.canvas()
-            dx = width / maxCharPerLine
-            dy = height / maxLinesPerScreen
+            dx = width / self.view.maxCharPerLine
+            dy = height / self.view.maxLinesPerScreen
             selection = (16,16,16,255)
             if self.cy == self.CY:
                 if self.CX == self.cx:
@@ -691,9 +608,8 @@ init -1500 python in _editor:
             self.view.parse()
 
         def _screen_to_cursor_coordinates(self, x, y):
-            global maxCharPerLine, maxLinesPerScreen
-            self.max = int(x * maxCharPerLine / config.screen_width)
-            cy = int(y * maxLinesPerScreen / config.screen_height)
+            self.max = int(x * self.view.maxCharPerLine / config.screen_width)
+            cy = int(y * self.view.maxLinesPerScreen / config.screen_height)
 
             if cy >= self.view.nolines:
                 cy = self.view.nolines - 1
@@ -777,7 +693,6 @@ init -1500 python in _editor:
             self.view.parse(force=True)
             renpy.redraw(self, 0)
 
-    editor = Editor()
 
 init 1701 python in _editor:
 
@@ -802,6 +717,79 @@ init 1701 python in _editor:
             renpy.restart_interaction()
 
     style.default.hyperlink_functions = (hyperlink_styler_wrap, hyperlink_callback_wrap, None)
+
+init 1702:
+    style _editor:
+        # must be monospace or need/add shadow
+        font _editor.fonts[_editor.font][0] + "/" + _editor.font + ".ttf"
+        size _editor.fontsize
+
+    style _editor_frame:
+        padding (0, 0)
+        pos (0, 0)
+        background "#272822"
+
+    style _editor_window:
+        align (0.5, 1.0)
+        background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
+
+    style _editor_error is _editor:
+        size int(_editor.fontsize * 0.80)
+        color "#d00"
+        hover_color "#f11"
+        hover_underline True
+
+    style _editor_search is _editor:
+        align (0.5, 0.5)
+        background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
+        padding gui.namebox_borders.padding
+
+    style _editor_suggestion_frame:
+        padding (0, 0)
+        background "#111a"
+
+    style _editor_textbutton is _editor:
+        color "#fff"
+        hover_color "ff2"
+
+
+screen _editor_find:
+    default editor = _editor.editor
+    default view = editor.view
+    frame:
+        align (0.5, 0.5)
+        background AlphaMask(Image("gui/frame.png", gui.confirm_frame_borders), mask="#000a")
+        vbox:
+            align (0.4, 0.5)
+            text "Enter search string:\n":
+                size 20
+                color "#fff"
+
+            add Input(hover_color="#3399ff",size=28, color="#afa", default=view.search_string, changed=view.search_init, length=256)
+            hbox:
+                textbutton "OK":
+                    text_style "_editor_textbutton"
+                    action Function(view.search)
+                    keysym('K_RETURN', 'K_KP_ENTER')
+                textbutton "Cancel":
+                    text_style "_editor_textbutton"
+                    action Hide("_editor_find")
+                    keysym('K_ESCAPE')
+
+
+screen _editor_suggestions(coords, suggestion_area, alts):
+    style_prefix "_editor_suggestion"
+    frame:
+        area suggestion_area
+        vbox:
+            for alt in alts:
+                textbutton alt:
+                    padding (0, 0)
+                    minimum (0, 0)
+                    text_style "_editor_textbutton"
+                    action Function(_editor.editor.view.replace, alt, coords)
+
+        key "K_ESCAPE" action Hide("_editor_suggestions")
 
 
 screen _editor_main:
