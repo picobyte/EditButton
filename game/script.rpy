@@ -52,7 +52,11 @@ label start:
 
     # You may notice now 3 buttons are shown in the quickmenu below: Apply, Cancel and Visual.
 
-    # If you add something that is not valid ren'py, however you'll get a warning and the apply button is replaced by Hide (or 'Debug' when pressed).
+    # If you add something that is not valid ren'py, however, you'll get a warning and the apply button is replaced by another button: Hide or Debug.
+
+    # As long are editing, errors are not hazardous, but if you'd apply erroneous code, the resulting Ren'py error would prevent access to this editor. That's why applying errors cannot be allowed.
+
+    # If your code is erroneous, you'll have to fix it in an external editor.
 
     # Now press Cancel, and continue the visual novel to the next line..
 

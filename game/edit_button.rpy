@@ -542,12 +542,13 @@ init -1700 python in _editor:
             height = int(len(suggestions) * char_height)
             coords = self.console.ordered_cursor_coordinates()
 
-            def replace_with_suggestion(self, choice, layer):
+            def replace_with_suggestion(choice=None, layer=None):
                 renpy.hide_screen("_editor_menu", layer=layer)
-                self.console.sbc(*coords)
-                self.insert([choice])
+                if choice != None:
+                    self.console.sbc(*coords)
+                    self.insert([choice])
 
-            return ((x, y, width, height), suggestions, replace_with_suggestion)
+            return {"area": (x, y, width, height), "choices": suggestions, "handler": replace_with_suggestion, "timer": 3.0}
 
 
     class Editor(renpy.Displayable):
@@ -712,7 +713,7 @@ init 1701 python in _editor:
             editor.select_word()
             renpy.redraw(editor, 0)
             editor.is_mouse_pressed = False
-            renpy.show_screen("_editor_menu", *editor.view.get_suggestions(), layer="transient")
+            renpy.show_screen("_editor_menu", layer="transient", **editor.view.get_suggestions())
             renpy.restart_interaction()
 
     def hide_all_screens_with_name(name):
@@ -747,7 +748,7 @@ init 1702:
         background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
         padding gui.namebox_borders.padding
 
-    style _editor_suggestion_frame:
+    style _editor_menu_frame:
         padding (0, 0)
         background "#111a"
 
@@ -780,17 +781,29 @@ screen _editor_find(layer="overlay"):
                     keysym('K_ESCAPE')
 
 
-screen _editor_menu(choice_area, choices, handler, layer="transient"):
-    style_prefix "_editor_suggestion"
+screen _editor_menu(area, choices, handler, layer="transient", timer=None):
+    style_prefix "_editor_menu"
+    if timer is not None:
+        timer timer action Function(handler, layer=layer)
     frame:
-        area choice_area
+        area area
         vbox:
             for choice in choices:
-                textbutton choice:
-                    padding (0, 0)
-                    minimum (0, 0)
-                    text_style "_editor_textbutton"
-                    action Function(handler, choice, layer)
+                if isinstance(choice, basestring):
+                    textbutton choice:
+                        padding (0, 0)
+                        minimum (0, 0)
+                        text_style "_editor_textbutton"
+                        action Function(handler, choice, layer=layer)
+                elif isinstance(choice, dict):
+                    if choice["type"] == "submenu":
+                        textbutton choice["name"]:
+                            padding (0, 0)
+                            minimum (0, 0)
+                            text_style "_editor_textbutton"
+                            hovered Function(handler, choice, hovered=True)
+                            unhovered Function(handler, choice, hovered=False)
+                            action Function(handler, choice)
 
         key "K_ESCAPE" action Hide("_editor_menu", _layer=layer)
 
