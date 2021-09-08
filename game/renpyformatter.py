@@ -40,7 +40,7 @@ class RenPyFormatter(Formatter):
             while ttype not in self.styles:
                 ttype = ttype.parent
 
-            if self.do_check and "String" in repr(ttype) or "Comment" in repr(ttype):
+            if self.do_check and ("String" in repr(ttype) or "Comment" in repr(ttype)):
                 # wrap up
                 if lastval:
                     stylebegin, styleend = self.styles[lasttype]
