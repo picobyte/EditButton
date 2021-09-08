@@ -147,38 +147,26 @@ init -1700 python in _editor:
 
 
     class RenPyData(ReadWriteData):
-        def __init__(self, fname, format_style=None):
+        def __init__(self, fname, language='en', format_style='monokai'):
+            # should also support ru, es, fr, pt and de
             from renpy_lexer import RenPyLexer
             from renpyformatter import RenPyFormatter
-            from spellchecker import SpellChecker
 
             super(RenPyData, self).__init__(fname)
             self.lexer = RenPyLexer(stripnl=False)
-            self.formater = RenPyFormatter(style=format_style if format_style else 'monokai')
-            self.lang = SpellChecker(language='en') # should also support ru, es, fr, pt and de
-            self._last_parsed_changes = None
-            self.spellcheck_modus = "Suggest"
+            self.formatter = RenPyFormatter(language=language, style=format_style)
 
         def parse(self, force=False):
             """ If changes were not yet parsed, check for errors; create colored_buffer for view on screen """
             from pygments import highlight
             if self.history.is_changed() or force:
-                unknown_words = Set()
-                if self.spellcheck_modus != "No check":
-                    for l in self.data:
-                        for w in self.lang.split_words(l):
-                            if w not in self.lang:
-                               unknown_words.add(w)
                 document = os.linesep.join(self.data)
                 renpy.parser.parse_errors = []
                 renpy.parser.parse(self.fname, document)
                 escaped = re.sub(r'(?<!\{)(\{(\{\{)*)(?!\{)', r'{\1', re.sub(r'(?<!\[)(\[(\[\[)*)(?!\[)', r'[\1', document))
 
                 # NOTE: must split on newline here, not os.linesep, or it won't work in windows
-                self.colored_buffer = highlight(escaped, self.lexer, self.formater).split('\n')
-                for w in unknown_words:
-                    for i in xrange(0, len(self.colored_buffer)):
-                        self.colored_buffer[i] = re.sub(r'\b'+w+r'\b', r'{a=_spell:'+w+r'}'+w+r'{/a}', self.colored_buffer[i])
+                self.colored_buffer = highlight(escaped, self.lexer, self.formatter).split('\n')
 
     class TextView(object):
         """keeps track of horizontal position in text. Wrapping is not taken into account for position."""
@@ -536,7 +524,7 @@ init -1700 python in _editor:
 
             x = int(self.console.cx * char_width)
 
-            suggestions = self.data.lang.candidates(self.get_selected())
+            suggestions = self.data.formatter.lang.candidates(self.get_selected())
             wordlen_max = max(map(lambda x: len(x), suggestions))
             width = int(wordlen_max * char_width)
             height = int(len(suggestions) * char_height)
@@ -698,13 +686,10 @@ init -1700 python in _editor:
                 self.view.data.save()
 
 
-        def set_spellcheck_modus(self):
-            if self.view.data.spellcheck_modus == "No check":
-                self.view.data.spellcheck_modus = "Suggest"
+        def set_spellcheck_modus(self, value):
+            if not value:
                 renpy.hide_screen("_editor_menu", layer="transient")
-            else:
-                self.view.data.spellcheck_modus = "No check"
-            self.view.data._last_parsed_changes = None
+            self.view.data.formatter.do_check = value
             self.view.parse(force=True)
             renpy.redraw(self, 0)
 
@@ -715,13 +700,13 @@ init 1701 python in _editor:
         editor = Editor()
 
     def hyperlink_styler_wrap(target):
-        if len(target) <= 7 or target[0:7] != "_spell:":
+        if len(target) <= 8 or target[0:8] != "_editor:":
             return hyperlink_styler(target)
 
         return style._editor_error
 
     def hyperlink_callback_wrap(target):
-        if len(target) <= 7 or target[0:7] != "_spell:":
+        if len(target) <= 8 or target[0:8] != "_editor:":
             return hyperlink_callback(target)
 
         if not renpy.get_screen("_editor_menu", layer="transient"):
@@ -893,8 +878,8 @@ screen _editor_main:
                     textbutton _("Hide") action Function(editor.show_debug_messages, False)
                 textbutton _("Cancel") action [Function(editor.exit, discard = True), Return()]
             textbutton _("Visual") action [Function(editor.exit), Return()]
-            if view.data.spellcheck_modus == "Suggest":
-                textbutton _("No check") action Function(editor.set_spellcheck_modus)
-            if view.data.spellcheck_modus == "No check":
-                textbutton _("Suggest") action Function(editor.set_spellcheck_modus)
+            if view.data.formatter.do_check:
+                textbutton _("No check") action Function(editor.set_spellcheck_modus, False)
+            else:
+                textbutton _("Suggest") action Function(editor.set_spellcheck_modus, True)
 
