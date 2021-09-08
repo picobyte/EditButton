@@ -239,6 +239,8 @@ init -1700 python in _editor:
             self.lnr -= sub - cursor_movement
             if cursor_movement == 0: # then view was moved
                 self.rewrap()
+                # either suggestion screen positions needs to be updated or closed
+                hide_all_screens_with_name("_editor_menu", layer="transient")
 
         def DOWN(self, add=1, new_history_entry=True):
             if new_history_entry:
@@ -248,6 +250,7 @@ init -1700 python in _editor:
             if cursor_movement:
                 self.console.cy += cursor_movement
             elif self.lnr + add < len(self.data): # view movement
+                hide_all_screens_with_name("_editor_menu", layer="transient")
                 self.lnr += add
                 self.rewrap()
                 while self.console.cy >= self.nolines:
@@ -519,6 +522,8 @@ init -1700 python in _editor:
                 renpy.redraw(self.console, 0)
 
         def get_suggestions(self, layer="transient"):
+            (cx, cy, CX, CY, selection) = self.console.ordered_cursor_coordinates()
+            coords = {"cx": cx, "cy": cy, "CX": CX, "CY": CY}
             char_width = config.screen_width / self.maxCharPerLine
             char_height = config.screen_height / self.maxLinesPerScreen
 
@@ -534,9 +539,7 @@ init -1700 python in _editor:
             else:
                 y = int((self.console.cy - len(suggestions)) * char_height)
 
-            (cx, cy, CX, CY, selection) = self.console.ordered_cursor_coordinates()
             self.last_focus[("_editor_menu", layer)] = time()
-            coords = {"cx": cx, "cy": cy, "CX": CX, "CY": CY}
             timeout = 1.5
 
             def suggestion_or_hover_timout(view, choice=None, hovered=None):
@@ -649,7 +652,7 @@ init -1700 python in _editor:
                     self.CX, self.CY = self.cx, self.cy
                 renpy.redraw(self, 0)
                 self.is_mouse_pressed = True
-                hide_all_screens_with_name("_editor_menu")
+                hide_all_screens_with_name("_editor_menu", layer="transient")
             if self.is_mouse_pressed and (ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP):
                 if ev.type == pygame.MOUSEMOTION:
                     self.CX, self.CY = self._screen_to_cursor_coordinates(x, y)
@@ -711,14 +714,15 @@ init 1701 python in _editor:
 
         if not renpy.get_screen("_editor_menu", layer="transient"):
             editor.select_word()
+            params = editor.view.get_suggestions(layer="transient")
             renpy.redraw(editor, 0)
             editor.is_mouse_pressed = False
-            renpy.show_screen("_editor_menu", view=editor.view, **editor.view.get_suggestions(layer="transient"))
+            renpy.show_screen("_editor_menu", view=editor.view, **params)
             renpy.restart_interaction()
 
-    def hide_all_screens_with_name(name):
-        while renpy.get_screen(name):
-            renpy.hide_screen(name)
+    def hide_all_screens_with_name(name, layer):
+        while renpy.get_screen(name, layer=layer):
+            renpy.hide_screen(name, layer=layer)
 
     style.default.hyperlink_functions = (hyperlink_styler_wrap, hyperlink_callback_wrap, None)
 
@@ -861,7 +865,7 @@ screen _editor_main:
         key "K_KP_EQUALS" action Function(view.insert, ["="])
 
         if renpy.get_screen("_editor_menu"):
-            key 'mousedown_1' action Function(_editor.hide_all_screens_with_name, "_editor_menu")
+            key 'mousedown_1' action Function(_editor.hide_all_screens_with_name, "_editor_menu", layer="transient")
 
         if renpy.get_screen("_editor_find"):
             key 'mousedown_1' action Hide("_editor_find")
