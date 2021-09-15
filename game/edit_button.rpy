@@ -299,7 +299,6 @@ init -1700 python in _editor:
             self.search_string = ""
             self.find_upstream = None
             self.find_downstream = None
-            self.last_focus = {}
 
         def get_selected(self):
             cx, cy, CX, CY, selection = self.console.ordered_cursor_coordinates()
@@ -521,41 +520,6 @@ init -1700 python in _editor:
                 self.RIGHT(m.end()-m.start())
                 renpy.redraw(self.console, 0)
 
-        def get_suggestions(self, layer="transient"):
-            (cx, cy, CX, CY, selection) = self.console.ordered_cursor_coordinates()
-            coords = {"cx": cx, "cy": cy, "CX": CX, "CY": CY}
-            char_width = config.screen_width / self.maxCharPerLine
-            char_height = config.screen_height / self.maxLinesPerScreen
-
-            x = int(self.console.cx * char_width)
-
-            suggestions = self.data.formatter.lang.candidates(self.get_selected())
-            wordlen_max = max(map(lambda x: len(x), suggestions))
-            width = int(wordlen_max * char_width)
-            height = int(len(suggestions) * char_height)
-
-            if self.console.cy + 1 + len(suggestions) <= self._max_lines or self.console.cy - len(suggestions) < 0:
-                y = int((1 + self.console.cy) * char_height)
-            else:
-                y = int((self.console.cy - len(suggestions)) * char_height)
-
-            self.last_focus[("_editor_menu", layer)] = time()
-            timeout = 1.5
-
-            def suggestion_or_hover_timout(view, choice=None, hovered=None):
-                if hovered is True:
-                    view.last_focus[("_editor_menu", layer)] = None
-                elif choice != None:
-                    renpy.hide_screen("_editor_menu", layer=layer)
-                    view.console.sbc(**coords)
-                    view.insert([choice])
-                elif hovered is False:
-                    view.last_focus[("_editor_menu", layer)] = time()
-                elif view.last_focus[("_editor_menu", layer)] is not None and time() - view.last_focus[("_editor_menu", layer)] > timeout:
-                    renpy.hide_screen("_editor_menu", layer=layer)
-
-            return {"area": (x, y, width, height), "choices": suggestions, "handler": suggestion_or_hover_timout, "timer": 0.5, "layer": layer, "_layer": layer}
-
 
     class Editor(renpy.Displayable):
         def __init__(self, *a, **b):
@@ -688,13 +652,51 @@ init -1700 python in _editor:
             elif apply:
                 self.view.data.save()
 
-
         def set_spellcheck_modus(self, value):
             if not value:
                 renpy.hide_screen("_editor_menu", layer="transient")
             self.view.data.formatter.do_check = value
             self.view.parse(force=True)
             renpy.redraw(self, 0)
+
+        def suggestion_or_hover_timout(self, layer, coords, choice=None, hovered=None):
+            if hovered is True:
+                self.last_focus[("_editor_menu", layer)] = None
+            elif choice != None:
+                renpy.hide_screen("_editor_menu", layer=layer)
+                self.sbc(cx=coords[0], cy=coords[1], CX=coords[2], CY=coords[3])
+                self.view.insert([choice])
+            elif hovered is False:
+                self.last_focus[("_editor_menu", layer)] = time()
+            elif self.last_focus[("_editor_menu", layer)] is not None and time() - self.last_focus[("_editor_menu", layer)] > self.menu_hoover_timeout:
+                renpy.hide_screen("_editor_menu", layer=layer)
+
+
+        def get_suggestions(self, layer="transient"):
+            self.select_word()
+            coords = self.ordered_cursor_coordinates()
+
+            char_width = config.screen_width / self.view.maxCharPerLine
+            char_height = config.screen_height / self.view.maxLinesPerScreen
+
+            suggestions = self.view.data.formatter.lang.candidates(self.view.get_selected())
+
+            x = int(self.cx * char_width)
+            wordlen_max = max(map(lambda x: len(x), suggestions))
+            width = int(wordlen_max * char_width)
+            height = int(len(suggestions) * char_height)
+
+            if self.cy + 1 + len(suggestions) <= self.view._max_lines or self.cy - len(suggestions) < 0:
+                y = int((1 + self.cy) * char_height)
+            else:
+                y = int((self.cy - len(suggestions)) * char_height)
+
+            self.last_focus[("_editor_menu", layer)] = time()
+
+            renpy.redraw(self, 0)
+            self.is_mouse_pressed = False
+            renpy.show_screen("_editor_menu", area=(x, y, width, height), choices=suggestions, handler=self.suggestion_or_hover_timout, timer=0.5, layer=layer, _layer=layer, coords=coords)
+            renpy.restart_interaction()
 
 
 init 1701 python in _editor:
@@ -713,12 +715,7 @@ init 1701 python in _editor:
             return hyperlink_callback(target)
 
         if not renpy.get_screen("_editor_menu", layer="transient"):
-            editor.select_word()
-            params = editor.view.get_suggestions(layer="transient")
-            renpy.redraw(editor, 0)
-            editor.is_mouse_pressed = False
-            renpy.show_screen("_editor_menu", view=editor.view, **params)
-            renpy.restart_interaction()
+            editor.get_suggestions(layer="transient")
 
     def hide_all_screens_with_name(name, layer):
         while renpy.get_screen(name, layer=layer):
@@ -785,10 +782,11 @@ screen _editor_find(layer="overlay"):
                     keysym('K_ESCAPE')
 
 
-screen _editor_menu(view, area, choices, handler, timer=None, layer="transient"):
+screen _editor_menu(area, choices, handler, timer=None, layer="transient", coords=coords):
+    default editor = _editor.editor
     style_prefix "_editor_menu"
     if timer is not None:
-        timer timer action Function(handler, view=view) repeat True
+        timer timer action Function(handler, layer=layer, coords=coords) repeat True
     frame:
         area area
         vbox:
@@ -797,9 +795,9 @@ screen _editor_menu(view, area, choices, handler, timer=None, layer="transient")
                     padding (0, 0)
                     minimum (0, 0)
                     text_style "_editor_textbutton"
-                    hovered Function(handler, view, choice, hovered=True)
-                    unhovered Function(handler, view, hovered=False)
-                    action Function(handler, view, choice)
+                    hovered Function(handler, layer=layer, coords=coords, choice=choice, hovered=True)
+                    unhovered Function(handler, layer=layer, coords=coords, hovered=False)
+                    action Function(handler, layer=layer, coords=coords, choice=choice)
 
         key "K_ESCAPE" action Hide("_editor_menu", _layer=layer)
 
@@ -866,8 +864,7 @@ screen _editor_main:
 
         if renpy.get_screen("_editor_menu"):
             key 'mousedown_1' action Function(_editor.hide_all_screens_with_name, "_editor_menu", layer="transient")
-
-        if renpy.get_screen("_editor_find"):
+        elif renpy.get_screen("_editor_find"):
             key 'mousedown_1' action Hide("_editor_find")
 
         hbox:
