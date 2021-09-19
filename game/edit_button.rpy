@@ -140,14 +140,18 @@ init -1700 python in _editor:
 
 
     class RenPyData(ReadWriteData):
-        def __init__(self, fname, language='en', format_style='monokai'):
+        def __init__(self, fname, language='en', style='monokai'):
             # should also support ru, es, fr, pt and de
             from renpy_lexer import RenPyLexer
-            from renpyformatter import RenPyFormatter
-
             super(RenPyData, self).__init__(fname)
+            self.language = language
+            self.style = style
+            self.set_format(language, style)
             self.lexer = RenPyLexer(stripnl=False)
-            self.formatter = RenPyFormatter(language=language, style=format_style)
+
+        def set_format(self, language=None, style=None):
+            from renpyformatter import RenPyFormatter
+            self.formatter = RenPyFormatter(language=language or self.language, style=style or self.style)
 
         def parse(self, force=False):
             """ If changes were not yet parsed, check for errors; create colored_buffer for view on screen """
@@ -160,6 +164,9 @@ init -1700 python in _editor:
 
                 # NOTE: must split on newline here, not os.linesep, or it won't work in windows
                 self.colored_buffer = highlight(escaped, self.lexer, self.formatter).split('\n')
+
+        def get_background_highlight(self):
+            return self.formatter.get_style_defs()
 
     class TextView(object):
 
@@ -484,7 +491,9 @@ init -1700 python in _editor:
 
         def display(self):
             ll = min(self.lnr + self.cbuflines, len(self.data))
-            return self.colorize(os.linesep.join(self.data.colored_buffer[self.lnr:ll]), self.lnr != 0, ll != len(self.data))
+            section = os.linesep.join(self.data.colored_buffer[self.lnr:ll])
+            section = self.colorize(section, self.lnr != 0, ll != len(self.data))
+            return re.sub(r'(\{/color\}[^{}]*)\{/color\}$', r'\1', section)
 
         def ctrl_z(self):
             self.data.history.undo(self)
@@ -549,7 +558,7 @@ init -1700 python in _editor:
 
     class Editor(renpy.Displayable):
         mousex = mousy = fname = view = context_menu = None
-        context_options = ["Inconsolata-Regular", "ProggyClean", {"name":"font_size", "submenu": ["18", "24"]}]
+        context_options = []
         buffer = {}
         timer = time()
         is_mouse_pressed = False
@@ -559,6 +568,13 @@ init -1700 python in _editor:
 
         def __init__(self, *a, **b):
             super(Editor, self).__init__(a, b)
+            inconsolata = {"name": "Inconsolata-Regular", "submenu": range(12, 42)}
+            proggy = {"name": "ProggyClean", "submenu": range(12, 42)}
+            Editor.context_options.append({"name": "font", "submenu": [inconsolata, proggy]})
+            Editor.context_options.append({ "name": "language", "submenu": ["de", "en", "es", "fr", "pt", "ru"] })
+            Editor.context_options.append({"name": "style", "submenu": ["abap", "algol", "algol_nu", "arduino", "autumn", "borland", "colorful", "default", "emacs", "friendly", "fruity", "igor", "inkpot", "lovelace", "manni", "monokai", "murphy", "native", "pastie", "perldoc", "rainbow_dash", "rrt", "sas", "tango", "vim", "vs", "xcode"] })
+            # also present but problematic:
+            # "paraiso_dark", "paraiso_light", "stata_dark", "stata_light", "solarized", "trac", "bw", 
             self.is_visible = False
 
         @staticmethod
@@ -585,7 +601,7 @@ init -1700 python in _editor:
             C = R.canvas()
             dx = width / TextView.get_max_char_per_line()
             dy = height / TextView.get_max_lines_per_screen()
-            selection = (16,16,16,255)
+            selection = self.view.data.get_background_highlight()[1]
             if Editor.cy == Editor.CY:
                 if Editor.CX == Editor.cx:
                     C.line((255,255,255,255),(Editor.cx*dx,Editor.cy*dy),(Editor.cx*dx, (Editor.cy+1.0)*dy))
@@ -718,12 +734,19 @@ init -1700 python in _editor:
 
         def add_context_menu(self):
             def devlogger(menu, pick):
-                if isinstance(pick, basestring):
-                    pick = menu.id + '\t' + pick
+                if isinstance(pick, (dict, renpy.python.RevertableDict)):
+                    return None
+                else:
+                    if menu.id == "language\t":
+                        self.view.data.set_format(language=pick)
+                    elif menu.id == "style\t":
+                        self.view.data.set_format(style=pick)
+                    self.view.parse(force=True)
+                    renpy.redraw(self, 0)
+
+                    pick = menu.id + pick
                     devlog.info(pick)
                     return pick
-                else:
-                    return None
 
             cw = config.screen_width / TextView.get_max_char_per_line()
             ch = config.screen_height / TextView.get_max_lines_per_screen()
@@ -744,7 +767,7 @@ init -1700 python in _editor:
 
             self.__dict__.update({"id": id, "base_menu": base_menu, "options": options if options else {}})
 
-            wordlen_max = max(map(lambda x: len(x if isinstance(x, basestring) else x["name"]) + 1, self.choices))
+            wordlen_max = max(map(lambda x: len(str(x["name"] if isinstance(x, (dict, renpy.python.RevertableDict)) else x)) + 1, self.choices))
             self.area = (self.x, self.y, int(wordlen_max * self.cw), int(len(self.choices) * self.ch))
             self.nested_menu = []
             self.focus()
@@ -769,16 +792,22 @@ init -1700 python in _editor:
             """selection, (un)hover event or timeout"""
             if pick != None:
                 index, pick = pick
-                if isinstance(pick, basestring):
+                if not isinstance(pick, (dict, renpy.python.RevertableDict)):
                     renpy.end_interaction(self.handler(self, pick))
                 elif 'submenu' in pick:
                     kwargs = dict((k, getattr(self, k)) for k in self.required_init_args)
-                    kwargs['choices'] = pick["submenu"]
-                    kwargs['id'] = self.id + "\t" + pick['name']
+
+                    # TODO/FIXME 1. could implement stacking as cards for menus
+                    # TODO/FIXME 2. choose other side if there's no space right of the menu
                     try:
                         kwargs['layer'] = config.layers[config.layers.index(self.layer)+1]
                     except ValueError:
-                        kwargs['layer'] = "transient"
+                        kwargs['layer'] = config.layers[config.layers.index("transient")+1]
+                    if renpy.get_screen("_editor_menu", layer=kwargs['layer']):
+                        renpy.hide_screen("_editor_menu", layer=kwargs['layer'])
+
+                    kwargs['choices'] = pick["submenu"]
+                    kwargs['id'] = self.id + pick['name'] + "\t"
                     kwargs['y'] = int(kwargs['y'] + index * self.ch)
                     kwargs['x'] = int(kwargs['x'] + self.area[2])
                     self.nested_menu.append(SelectionMenu(base_menu=self, **kwargs))
@@ -849,7 +878,7 @@ screen _editor_menu(selection):
         add selection
         vbox:
             for (index, pick) in enumerate(selection.choices):
-                textbutton (pick if isinstance(pick, basestring) else pick["name"]):
+                textbutton (pick["name"] if isinstance(pick, (dict, renpy.python.RevertableDict)) else str(pick)):
                     padding (0, 0)
                     minimum (0, 0)
                     text_font _editor.get_font(selection.font)
@@ -869,7 +898,7 @@ screen _editor_main:
     frame:
         padding (0, 0)
         pos (0, 0)
-        background "#272822"
+        background view.data.get_background_highlight()[0]
         add editor
         text view.display() font _editor.get_font() size view.font['size']
         if view.show_errors:

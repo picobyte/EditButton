@@ -21,7 +21,8 @@ class RenPyFormatter(Formatter):
             if style['color']:
                 start += '{color=#%s}' % style['color'].lower()
                 end = '{/color}' + end
-            for s in ['italic', 'underline']: #, 'bold' this moves the input line so won't work
+            #, 'bold' moves the input line so won't work
+            for s in ['italic', 'underline']:
                 if style[s]:
                     start += '{'+s[0]+'}'
                     end = '{/'+s[0]+'}' + end
@@ -74,3 +75,6 @@ class RenPyFormatter(Formatter):
         if lastval:
             stylebegin, styleend = self.styles[lasttype]
             outfile.write(stylebegin + lastval + styleend)
+
+    def get_style_defs(self, arg=None):
+        return (self.style.background_color, self.style.highlight_color)
