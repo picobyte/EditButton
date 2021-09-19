@@ -3,35 +3,29 @@ init -1700 python in _editor:
     import os
     import re
     from time import time
-
-    # any mono font should be implementable, but requires tweaking the two ratios.
-    # adjust 1st ratio until selection shadows lines vertically, if shadow is too early, decrease ratio
-    # adjust 2nd ratio until selection shadows a line entirely, if shadow is too short, decrease ratio
-    fonts = {"Inconsolata-Regular": ("codeface/fonts/inconsolata", 1.0, 1.0),
-             "ProggyClean": ("codeface/fonts/proggy-clean", 1.166, 1.233)}
-    font = "Inconsolata-Regular"
-    fontsize = 28
-
+    import pygame
 
     class History(object):
         def __init__(self):
             # FIXME: could change elements to dicts with {line: {pre: state, post: state}}
             # only insert is a bit harder.
-            self._undo = [{"sbc": [None, None, None]}]
+            self._undo = [{"sbc": {"lnr": None, "cx": None, "cy": None}}]
             self.rewrite_history = True # disable this while undoing / redoing
             self.at = -1
             self.changed = True
 
-        def update_cursor(self, editor):
+        def update_cursor(self, editor, force=False):
             """ cursor update triggers new history entry unless part of a combined edit action """
+            mouse = "; mouse: {0}, {1}".format(Editor.mousex, Editor.mousey) if hasattr(Editor, "mousey") else ""
+            config.window_title = Editor.fname + ": line %d+%d, char %d%s" % (editor.view.lnr, Editor.cy, Editor.cx, mouse)
             if len(self._undo[len(self._undo) - 1]) != 1:
                 if self.rewrite_history:
                     self._undo = self._undo[:(self.at+1)]
 
                 self._undo.append({})
             last = len(self._undo) - 1
-            if not "sbc" in self._undo[last] or self._undo[last]["sbc"][0] is None:
-                self._undo[last]["sbc"] = editor.view.coords()
+            if force or len(self._undo[last]) == 0 or self._undo[last]["sbc"]["cx"] is None:
+                self._undo[last]["sbc"] = editor.view.coords
 
         def append(self, func_ndx_key, args):
             """ appends to history. also undo populates this, to allow redo """
@@ -48,14 +42,14 @@ init -1700 python in _editor:
                 self._undo[self.at][func_ndx_key] = args
             self.changed = True
 
-        def _undo_redo_helper(self, view):
+        def _undo_redo_helper(self, view, is_undo):
             from operator import itemgetter
             action = self._undo[self.at]
-            self._undo[self.at] = {"sbc": view.coords()}
+            self._undo[self.at] = {"sbc": view.coords}
             self.rewrite_history = False
             for (fn, args) in sorted(action.items(), key=itemgetter(0)):
                 if fn == "sbc":
-                    view.console.sbc(*args)
+                    view.console.sbc(**args)
                 else:
                     getattr(view.data, fn[0])(fn[1], *args)
             self.rewrite_history = True
@@ -69,20 +63,19 @@ init -1700 python in _editor:
                 if self.at != 0 and len(self._undo[self.at]) == 1:
                     self.at -= 1
                 elif self.at == len(self._undo) - 1:
-                    self._undo.append({"sbc": view.coords()})
-                self._undo_redo_helper(view)
+                    self._undo.append({"sbc": view.coords})
+                self._undo_redo_helper(view, is_undo=True)
                 self.at -= 1
 
         def redo(self, view):
             if self.at < len(self._undo) - 1:
                 self.at += 1
-                self._undo_redo_helper(view)
+                self._undo_redo_helper(view, is_undo=False)
                 if self.at == len(self._undo) - 1 and len(self._undo[self.at]) == 1:
                     self.at += 1
 
         def is_changed(self):
-            ret = self.changed
-            self.changed = False
+            ret, self.changed = (self.changed, False)
             return ret
 
 
@@ -169,33 +162,55 @@ init -1700 python in _editor:
                 self.colored_buffer = highlight(escaped, self.lexer, self.formatter).split('\n')
 
     class TextView(object):
+
+        # mono fonts should be implementable, require tweaking the two ratios.
+        # adjust 1st ratio until selection shadows lines vertically, if shadow is too early, decrease ratio
+        # adjust 2nd ratio until selection shadows a line entirely, if shadow is too short, decrease ratio
+
+        fonts = {"Inconsolata-Regular": ("codeface/fonts/inconsolata", 1.0, 1.0),
+                 "ProggyClean": ("codeface/fonts/proggy-clean", 1.166, 1.233)}
+        font = {"name": "Inconsolata-Regular", "size": 28}
+
         """keeps track of horizontal position in text. Wrapping is not taken into account for position."""
-        wheel_scroll_lines = 3
-        def __init__(self, console, data, nolines=None, lnr=0, wheel_scroll_lines=None):
-            global fonts, font, fontsize
+        def __init__(self, console, data, font=None, nolines=None, lnr=0, wheel_scroll_lines=3):
             self.data = data
             self.lnr = lnr
             self.console = console
-            self.maxCharPerLine = fonts[font][1] * 3840.545 / fontsize
-            self.maxLinesPerScreen = fonts[font][2] * (2.3 + 912.0 / fontsize)
-            self._max_lines = int(self.maxLinesPerScreen)
-            self.cbuflines = self._max_lines
             self.show_errors = ""
+            self.wheel_scroll_lines = wheel_scroll_lines
             self.keymap = set(['mousedown_4', 'mousedown_5'])
             self._add_km(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['repeat_', ''])
             self._add_km(['HOME', 'END'], ['ctrl_'])
+            self.set_font(font)
+
+        @staticmethod
+        def _set_font(name=font['name'], size=font['size']):
+            TextView._max_lines = int(TextView.get_max_lines_per_screen(name, size))
+            devlog.info(str(TextView._max_lines))
+            TextView.font = {"name": name, "size": size}
+
+        @staticmethod
+        def get_max_char_per_line(name=font['name'], size=font['size']):
+            return TextView.fonts[name][1] * 3840.545 / size
+
+        @staticmethod
+        def get_max_lines_per_screen(name=font['name'], size=font['size']):
+            return TextView.fonts[name][2] * (2.3 + 912.0 / size)
+
+        def set_font(self, font=None):
+            TextView._set_font(*font) if font else TextView._set_font()
+            self.cbuflines = TextView._max_lines
             self.parse()
 
         def _add_km(self, km, mod): self.keymap.update([m+'K_'+k for k in km for m in mod])
 
         @property
-        def line(self): return self.wrapped_buffer[self.console.cy]
+        def line(self): return self.wrapped_buffer[Editor.cy]
         @property
-        def nolines(self):
-            return len(self.wrapped_buffer)
-
+        def nolines(self): return len(self.wrapped_buffer)
+        @property
         def coords(self):
-            return [self.lnr, self.console.cx, self.console.cy]
+            return {"lnr": self.lnr, "cx": Editor.cx, "cy": Editor.cy, "CX": Editor.CX, "CY": Editor.CY}
 
         def rewrap(self):
             """ a copy of the buffer in view that is wrapped as shown in view """
@@ -203,15 +218,15 @@ init -1700 python in _editor:
             self.wrap2buf = {}
             atline = 0
             tot = 0
-            for line in self.data[self.lnr:min(self.lnr + self._max_lines, len(self.data))]:
-                wrap = renpy.text.extras.textwrap(line, self.maxCharPerLine) or ['']
+            for line in self.data[self.lnr:min(self.lnr + TextView._max_lines, len(self.data))]:
+                wrap = renpy.text.extras.textwrap(line, TextView.get_max_char_per_line()) or ['']
 
                 offs = 0
                 for l in wrap:
                     offs += line.index(l, offs) - offs
                     self.wrap2buf[tot]=(offs, atline)
                     tot += 1
-                    if tot > self._max_lines:
+                    if tot > TextView._max_lines:
                         return
                     offs += len(l)
                     self.wrapped_buffer.append(l)
@@ -233,11 +248,11 @@ init -1700 python in _editor:
             if new_history_entry:
                 self.data.history.update_cursor(self.console)
 
-            sub = min(self.console.cy + self.lnr, sub)
-            cursor_movement = min(self.console.cy, sub)
-            self.console.cy -= cursor_movement
+            sub = min(Editor.cy + self.lnr, sub)
+            cursor_movement = min(Editor.cy, sub)
+            Editor.cy -= cursor_movement
             self.lnr -= sub - cursor_movement
-            if cursor_movement == 0: # then view was moved
+            if cursor_movement == 0: # then view moved
                 self.rewrap()
                 # either suggestion screen positions needs to be updated or closed
                 hide_all_screens_with_name("_editor_menu", layer="transient")
@@ -245,19 +260,19 @@ init -1700 python in _editor:
         def DOWN(self, add=1, new_history_entry=True):
             if new_history_entry:
                 self.data.history.update_cursor(self.console)
-            cursor_movement = min(self.nolines - self.console.cy - 1, add)
+            cursor_movement = min(self.nolines - Editor.cy - 1, add)
             add -= cursor_movement
             if cursor_movement:
-                self.console.cy += cursor_movement
+                Editor.cy += cursor_movement
             elif self.lnr + add < len(self.data): # view movement
                 hide_all_screens_with_name("_editor_menu", layer="transient")
                 self.lnr += add
                 self.rewrap()
-                while self.console.cy >= self.nolines:
-                    self.console.cy -= 1
+                while Editor.cy >= self.nolines:
+                    Editor.cy -= 1
                     self.parse()
             else:
-                 self.console.CY = self.console.cy
+                 Editor.CY = Editor.cy
 
         def PAGEUP(self):
             self.UP(self.nolines)
@@ -267,12 +282,12 @@ init -1700 python in _editor:
 
         def ctrl_HOME(self):
             self.data.history.update_cursor(self.console)
-            self.console.cy = self.lnr = 0
+            Editor.cy = self.lnr = 0
 
         def ctrl_END(self):
             self.data.history.update_cursor(self.console)
-            self.console.cy = self.nolines - 1
-            self.lnr = len(self.data) - self.console.cy - 1
+            Editor.cy = self.nolines - 1
+            self.lnr = len(self.data) - Editor.cy - 1
 
         def mousedown_4(self): self.UP(self.wheel_scroll_lines)
         def mousedown_5(self): self.DOWN(self.wheel_scroll_lines)
@@ -287,7 +302,7 @@ init -1700 python in _editor:
             self._add_km(['HOME', 'END'], ['shift_', ''])
             self._add_km(['LEFT', 'RIGHT'], ['shift_', 'ctrl_', 'ctrl_shift_', 'repeat_ctrl_shift_','', 'repeat_shift_', 'repeat_ctrl_', 'repeat_'])
             self._add_km(['UP', 'DOWN'], ['shift_', 'repeat_shift_'])
-            self.console.max = 0xffff
+            Editor.max = 0xffff
             # FIXME: this is QWERTY keyboard specific.
             self.nrSymbol = ")!@#$%^&*("
             self.oSymName = [ "BACKQUOTE", "MINUS", "EQUALS", "LEFTBRACKET", "RIGHTBRACKET",
@@ -315,65 +330,66 @@ init -1700 python in _editor:
             if new_history_entry:
                 self.data.history.update_cursor(self.console)
 
-            while self.console.cx < sub and self.wrap2buf[self.console.cy][0]:
-                sub -= self.console.cx + 1
+            while Editor.cx < sub and self.wrap2buf[Editor.cy][0]:
+                sub -= Editor.cx + 1
                 self.UP()
-                self.console.cx = len(self.line)
-            self.console.max = max(self.console.cx - sub, 0)
+                Editor.cx = len(self.line)
+            Editor.max = max(Editor.cx - sub, 0)
 
         def RIGHT(self, add=1, new_history_entry=True):
             if new_history_entry:
                 self.data.history.update_cursor(self.console)
 
-            bx, by = self.wrap2buf[self.console.cy]
-            while self.console.cx + add > len(self.line) and bx+self.console.cx <= len(self.data[self.lnr+by]):
-                add -= len(self.line) - self.console.cx + 1
+            bx, by = self.wrap2buf[Editor.cy]
+            while Editor.cx + add > len(self.line) and bx+Editor.cx <= len(self.data[self.lnr+by]):
+                add -= len(self.line) - Editor.cx + 1
                 self.DOWN()
-                self.console.cx = 0
-            self.console.cx = min(self.console.cx + add, len(self.line))
-            self.console.max = self.console.cx
+                Editor.cx = 0
+            Editor.cx = min(Editor.cx + add, len(self.line))
+            Editor.max = Editor.cx
 
         def ctrl_LEFT(self):
-            bx, by = self.wrap2buf[self.console.cy]
-            m = re.compile(r'\w*\W*$').search(self.data[self.lnr+by][:bx+self.console.cx])
+            bx, by = self.wrap2buf[Editor.cy]
+            m = re.compile(r'\w*\W*$').search(self.data[self.lnr+by][:bx+Editor.cx])
             if m:
                 self.LEFT(len(m.group(0)))
 
         def ctrl_RIGHT(self):
-            bx, by = self.wrap2buf[self.console.cy]
-            m = re.compile(r'^\w*\W*').match(self.data[self.lnr+by][bx+self.console.cx:])
+            bx, by = self.wrap2buf[Editor.cy]
+            m = re.compile(r'^\w*\W*').match(self.data[self.lnr+by][bx+Editor.cx:])
             if m:
                 self.RIGHT(len(m.group(0)))
 
         def HOME(self):
             self.data.history.update_cursor(self.console)
-            self.console.max = 0
+            Editor.max = 0
 
         def END(self):
             self.data.history.update_cursor(self.console)
-            self.console.max = 0xffff
+            Editor.max = 0xffff
 
         def RETURN(self): self.insert(['',''])
 
         def BACKSPACE(self):
-            cons = self.console
-            if cons.cx == cons.CX and cons.cy == cons.CY:
-                if cons.cx or self.wrap2buf[cons.cy][0]:
+            self.data.history.update_cursor(self.console, force=True)
+            if Editor.cx == Editor.CX and Editor.cy == Editor.CY:
+                if Editor.cx or self.wrap2buf[Editor.cy][0]:
                     self.LEFT(new_history_entry=False)
-                elif self.lnr + cons.cy != 0:
+                elif self.lnr + Editor.cy != 0:
                     self.UP(new_history_entry=False)
-                    cons.max = len(self.line)
+                    Editor.max = len(self.line)
                 else:
                     return
-                cons.cx = cons.max
-            self.DELETE()
+                Editor.cx = Editor.max
+            self.DELETE(force=False)
 
         def cursor2buf_coords(self, cx, cy, CX, CY, _selection=None):
             sx, sy = self.wrap2buf[cy]
             ex, ey = self.wrap2buf[CY]
             return (sx+cx, sy+self.lnr, ex+CX, ey+self.lnr)
 
-        def DELETE(self):
+        def DELETE(self, force=True):
+            self.data.history.update_cursor(self.console, force=force)
             cx, cy, CX, CY, selection = self.console.ordered_cursor_coordinates()
             sx, sy, ex, ey = self.cursor2buf_coords(cx, cy, CX, CY)
 
@@ -383,11 +399,11 @@ init -1700 python in _editor:
                 del self.data[sy:ey]
                 self.data[sy] = start + self.data[sy][ex:]
             elif sy < len(self.data) - 1:
-                self.console.max = len(self.data[sy])
+                Editor.max = len(self.data[sy])
                 self.data[sy] += self.data[sy+1]
                 del self.data[sy+1]
             self.parse()
-            self.console.cy = self.console.CY = cy
+            Editor.cy = Editor.CY = cy
             if cx > len(self.line):
                 # fix cursor placement if space was deleted causing a word at the end of the line to wrap to the next line
                 cx -= len(self.line) + 1
@@ -397,7 +413,7 @@ init -1700 python in _editor:
                 dx = self.wrap2buf[cy][0] - sx
                 self.UP(new_history_entry=False)
                 cx = len(self.line) + 1 - dx
-            self.console.max = self.console.cx = self.console.CX = cx
+            Editor.max = Editor.cx = Editor.CX = cx
 
         def copy(self):
             selection = self.get_selected()
@@ -406,12 +422,13 @@ init -1700 python in _editor:
                 pyperclip.copy(selection)
 
         def cut(self):
-            if self.console.CX != self.console.cx or self.console.CY != self.console.cy:
+            if Editor.CX != Editor.cx or Editor.CY != Editor.cy:
                 self.copy()
                 self.handlekey("DELETE")
 
         def insert(self, entries=None):
             import pyperclip
+            self.data.history.update_cursor(self.console, force=True)
 
             if entries == None: # paste in absences of entries
                 entries = pyperclip.paste().split(os.linesep)
@@ -419,9 +436,9 @@ init -1700 python in _editor:
             cx, cy, CX, CY, selection = self.console.ordered_cursor_coordinates()
 
             if cx != CX or cy != CY:
-                self.DELETE()
+                self.DELETE(force=False)
 
-            cx, cy = self.console.cx, self.console.cy
+            cx, cy = Editor.cx, Editor.cy
 
             offs, atline = self.wrap2buf[cy]
             cx += offs
@@ -436,30 +453,30 @@ init -1700 python in _editor:
             self.parse()
 
             # distinction required to prevent cursor jump when pasting/inserting on first line.
-            if len(entries) <= 1 and cx + len(entries[0]) - self.wrap2buf[self.console.cy][0] < len(self.line):
-                self.console.cx = cx + len(entries[0])
+            if len(entries) <= 1 and cx + len(entries[0]) - self.wrap2buf[Editor.cy][0] < len(self.line):
+                Editor.cx = cx + len(entries[0])
             else:
                 self.UP(new_history_entry=False)
                 for e in entries:
                     self.DOWN(new_history_entry=False)
-                    self.console.cx = cx + len(e)
-                    while self.console.cx - self.wrap2buf[self.console.cy][0] > len(self.line):
+                    Editor.cx = cx + len(e)
+                    while Editor.cx - self.wrap2buf[Editor.cy][0] > len(self.line):
                         self.DOWN(new_history_entry=False)
-                        if not self.wrap2buf[self.console.cy][0]:
+                        if not self.wrap2buf[Editor.cy][0]:
                             break
                     cx = 0
-                self.console.CY = self.console.cy
+                Editor.CY = Editor.cy
 
-            self.console.cx -= self.wrap2buf[self.console.cy][0]
-            self.console.max = self.console.CX = self.console.cx
+            Editor.cx -= self.wrap2buf[Editor.cy][0]
+            Editor.max = Editor.CX = Editor.cx
             renpy.redraw(self.console, 0)
 
         def handlekey(self, keystr):
             """ repeat keys are handled as normal keys; unless shift is provided selection is discarded and cursor is redrawn """
             getattr(self, re.sub(r'^(?:repeat_)?(ctrl_|meta_|alt_|)(?:shift_)?K_', r'\1', keystr))()
-            self.console.cx = min(self.console.max, len(self.line))
+            Editor.cx = min(Editor.max, len(self.line))
             if "shift_" not in keystr:
-                self.console.CX, self.console.CY = self.console.cx, self.console.cy
+                Editor.CX, Editor.CY = Editor.cx, Editor.cy
             renpy.redraw(self.console, 0)
 
         def colorize(self, txt, at_start, at_end):
@@ -488,7 +505,7 @@ init -1700 python in _editor:
 
         def search_next(self):
             chars = None
-            had_selection = (abs(self.console.cx - self.console.CX) + 1) * (abs(self.console.cy - self.console.CY) + 1)
+            had_selection = (abs(Editor.cx - Editor.CX) + 1) * (abs(Editor.cy - Editor.CY) + 1)
             try:
                 while True:
                     m = next(self.find_upstream)
@@ -506,72 +523,86 @@ init -1700 python in _editor:
                     renpy.notify("Not found")
                     pass
                 if chars is not None:
-                    self.console.CY = self.console.CX = self.lnr = 0
+                    Editor.CY = Editor.CX = self.lnr = 0
                     self.PAGEUP()
                     self.HOME()
                     self.rewrap()
             if chars is None:
                 renpy.notify("Not found")
             else:
-                self.console.cx = self.console.CX
-                self.console.cy = self.console.CY
+                Editor.cx = Editor.CX
+                Editor.cy = Editor.CY
                 self.RIGHT(chars)
-                self.console.CX, self.console.CY = self.console.cx, self.console.cy
+                Editor.CX, Editor.CY = Editor.cx, Editor.cy
                 self.RIGHT(m.end()-m.start())
                 renpy.redraw(self.console, 0)
 
+        def suggestions_for_selected(self):
+            return self.data.formatter.lang.candidates(self.get_selected())
+
+        def set_spellcheck_modus(self, value):
+            if not value:
+                renpy.hide_screen("_editor_menu", layer="transient")
+            self.data.formatter.do_check = value
+            self.parse(force=True)
+            renpy.redraw(self.console, 0)
 
     class Editor(renpy.Displayable):
+        mousex = mousy = fname = view = context_menu = None
+        context_options = ["Inconsolata-Regular", "ProggyClean", {"name":"font_size", "submenu": ["18", "24"]}]
+        buffer = {}
+        timer = time()
+        is_mouse_pressed = False
+        max = cx = cy = CX = CY = 0 # last two are meant for dragging
+        suggestion_menu = None #TODO: make this a hashmap per word?
+        original_title = None
+
         def __init__(self, *a, **b):
             super(Editor, self).__init__(a, b)
-            self.fl = {}
-            self.fname = None
-            self.view = None
-            self.timer = time()
-            self.is_mouse_pressed = False
-            self.exit() # sets is_visible and cursor coords to default
+            self.is_visible = False
 
-        def ordered_cursor_coordinates(self):
-            cx, cy = self.cx, self.cy
-            CX, CY = self.CX, self.CY
+        @staticmethod
+        def ordered_cursor_coordinates():
+            cx, cy = Editor.cx, Editor.cy
+            CX, CY = Editor.CX, Editor.CY
 
             selection = True
 
             if cy > CY:
-                cy, CY = CY, cy
-                cx, CX = CX, cx
+                Editor.cy, Editor.CY = CY, cy
+                Editor.cx, Editor.CX = CX, cx
 
             elif cy == CY:
                 if cx > CX:
-                    cx, CX = CX, cx
+                    Editor.cx, Editor.CX = CX, cx
                 elif cx == CX:
                     selection = False
-            return (cx, cy, CX, CY, selection)
+            return (Editor.cx, Editor.cy, Editor.CX, Editor.CY, selection)
 
         def render(self, width, height, st, at):
             """ draw the cursor or the selection """
             R = renpy.Render(width, height)
             C = R.canvas()
-            dx = width / self.view.maxCharPerLine
-            dy = height / self.view.maxLinesPerScreen
+            dx = width / TextView.get_max_char_per_line()
+            dy = height / TextView.get_max_lines_per_screen()
             selection = (16,16,16,255)
-            if self.cy == self.CY:
-                if self.CX == self.cx:
-                    C.line((255,255,255,255),(self.cx*dx,self.cy*dy),(self.cx*dx, (self.cy+1.0)*dy))
+            if Editor.cy == Editor.CY:
+                if Editor.CX == Editor.cx:
+                    C.line((255,255,255,255),(Editor.cx*dx,Editor.cy*dy),(Editor.cx*dx, (Editor.cy+1.0)*dy))
                 else:
-                    C.rect(selection,(self.cx*dx, self.cy*dy, (self.CX-self.cx)*dx, dy))
-            elif self.cy < self.CY:
-                x = self.cx
-                for y in xrange(self.cy, self.CY):
+                    C.rect(selection,(Editor.cx*dx, Editor.cy*dy, (Editor.CX-Editor.cx)*dx, dy))
+            elif Editor.cy < Editor.CY:
+                x = Editor.cx
+                for y in xrange(Editor.cy, Editor.CY):
                     C.rect(selection, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, dy))
                     x = 0
-                C.rect(selection, (0, self.CY*dy, self.CX*dx, dy))
+                C.rect(selection, (0, Editor.CY*dy, Editor.CX*dx, dy))
             else:
-                x = self.CX
-                for y in xrange(self.CY, self.cy):
+                x = Editor.CX
+                for y in xrange(Editor.CY, Editor.cy):
                     C.rect(selection, (x*dx, y*dy, (len(self.view.wrapped_buffer[y])-x)*dx, dy))
                     x = 0
-                C.rect(selection, (0, self.cy*dy, self.cx*dx, dy))
+                C.rect(selection, (0, Editor.cy*dy, Editor.cx*dx, dy))
             return R
 
         def show_debug_messages(self, do_show):
@@ -579,72 +610,80 @@ init -1700 python in _editor:
             self.view.parse()
 
         def _screen_to_cursor_coordinates(self, x, y):
-            self.max = int(x * self.view.maxCharPerLine / config.screen_width)
-            cy = int(y * self.view.maxLinesPerScreen / config.screen_height)
+            Editor.max = int(x * TextView.get_max_char_per_line() / config.screen_width)
+            cy = int(y * TextView.get_max_lines_per_screen() / config.screen_height)
 
             if cy >= self.view.nolines:
                 cy = self.view.nolines - 1
-            return (min(self.max, len(self.view.wrapped_buffer[cy])), cy)
+            return (min(Editor.max, len(self.view.wrapped_buffer[cy])), cy)
 
         def sbc(self, lnr=None, cx=None, cy=None, CX=None, CY=None):
             """set buffer coordinates"""
+            devlog.info("sbc (%s, %s, %s, %s, %s)" % (lnr, cx, cy, CX, CY))
             self.view.lnr = self.view.lnr if lnr is None else lnr
-            self.cx = self.cx if cx is None else cx
-            self.cy = self.cy if cy is None else cy
-            self.CX = self.cx if CX is None else CX
-            self.CY = self.cy if CY is None else CY
+            Editor.cx = Editor.cx if cx is None else cx
+            Editor.cy = Editor.cy if cy is None else cy
+            Editor.CX = Editor.cx if CX is None else CX
+            Editor.CY = Editor.cy if CY is None else CY
             self.view.rewrap()
 
         def select_word(self):
-            bx, by = self.view.wrap2buf[self.cy]
-            m = re.compile(r'\w*$').search(self.view.data[self.view.lnr+by][:bx+self.cx])
+            bx, by = self.view.wrap2buf[Editor.cy]
+            m = re.compile(r'\w*$').search(self.view.data[self.view.lnr+by][:bx+Editor.cx])
             if m:
-                self.cx -= len(m.group(0))
-            m = re.compile(r'^\w*').match(self.view.data[self.view.lnr+by][bx+self.cx:])
+                Editor.cx -= len(m.group(0))
+            m = re.compile(r'^\w*').match(self.view.data[self.view.lnr+by][bx+Editor.cx:])
             if m:
-                self.max = self.CX = min(self.cx+len(m.group(0)), len(self.view.line))
+                Editor.max = Editor.CX = min(Editor.cx+len(m.group(0)), len(self.view.line))
 
         def event(self, ev, x, y, st):
-            import pygame
-            if ev.type == pygame.MOUSEBUTTONDOWN:
+            if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+                Editor.cx, Editor.cy = self._screen_to_cursor_coordinates(x, y)
                 self.view.data.history.update_cursor(self)
-                self.cx, self.cy = self._screen_to_cursor_coordinates(x, y)
-                if time() - self.timer < 0.5:
+                if time() - Editor.timer < 0.5:
                     self.select_word()
                 else:
-                    self.timer = time()
-                    self.CX, self.CY = self.cx, self.cy
+                    Editor.timer = time()
+                    Editor.CX, Editor.CY = Editor.cx, Editor.cy
                 renpy.redraw(self, 0)
-                self.is_mouse_pressed = True
+                Editor.is_mouse_pressed = True
                 hide_all_screens_with_name("_editor_menu", layer="transient")
-            if self.is_mouse_pressed and (ev.type == pygame.MOUSEMOTION or ev.type == pygame.MOUSEBUTTONUP):
-                if ev.type == pygame.MOUSEMOTION:
-                    self.CX, self.CY = self._screen_to_cursor_coordinates(x, y)
+            elif ev.type == pygame.MOUSEMOTION: # Updates the position of the mouse every time the player moves it
+                Editor.mousex = x
+                Editor.mousey = y
+                if Editor.is_mouse_pressed:
+                    Editor.CX, Editor.CY = self._screen_to_cursor_coordinates(x, y)
+                renpy.redraw(self, 0)
+            elif Editor.is_mouse_pressed and ev.type == pygame.MOUSEBUTTONUP:
                 renpy.redraw(self, 0)
                 if ev.type == pygame.MOUSEBUTTONUP:
-                    self.CX, self.CY, self.cx, self.cy = self.cx, self.cy, self.CX, self.CY
-                    self.is_mouse_pressed = False
+                    Editor.CX, Editor.CY, Editor.cx, Editor.cy = Editor.cx, Editor.cy, Editor.CX, Editor.CY
+                    Editor.is_mouse_pressed = False
 
         def start(self, ctxt, offset=2):
             (fname, lnr) = ctxt
             if fname: # no fname indicates failure
                 lnr = lnr - 1
-                self.fname = os.path.join(renpy.config.basedir, fname)
+                Editor.fname = os.path.join(renpy.config.basedir, fname)
 
-                if fname not in self.fl:
-                    self.fl[fname] = EditView(console=self, data=RenPyData(self.fname), lnr=lnr)
+                if fname not in Editor.buffer:
+                    Editor.buffer[fname] = EditView(console=self, data=RenPyData(Editor.fname), lnr=lnr)
                 else:
                     self.view.lnr = lnr
                     self.view.handlekey("END") # NB. call via handlekey triggers cursor redraw.
-                self.view = self.fl[fname]
+                self.view = Editor.buffer[fname]
                 self.is_visible = True
                 self.view.rewrap()
+                if Editor.original_title is None:
+                    Editor.original_title = config.window_title
                 renpy.redraw(self, 0)
 
         def exit(self, discard=False, apply=False):
             """ unless discarded, changes are kept in store. Applied changes are not visible until reload (shift+R). """
             self.is_visible = False
-            self.max = self.cx = self.cy = self.CX = self.CY = 0 # last two are meant for dragging
+            Editor.max = Editor.cx = Editor.cy = Editor.CX = Editor.CY = 0 # last two are meant for dragging
+            if Editor.original_title is not None:
+                config.window_title = Editor.original_title
             if discard:
                 #reload from disk
                 self.view.data.load()
@@ -652,57 +691,113 @@ init -1700 python in _editor:
             elif apply:
                 self.view.data.save()
 
-        def set_spellcheck_modus(self, value):
-            if not value:
-                renpy.hide_screen("_editor_menu", layer="transient")
-            self.view.data.formatter.do_check = value
-            self.view.parse(force=True)
-            renpy.redraw(self, 0)
-
-        def suggestion_or_hover_timout(self, layer, coords, choice=None, hovered=None):
-            if hovered is True:
-                self.last_focus[("_editor_menu", layer)] = None
-            elif choice != None:
-                renpy.hide_screen("_editor_menu", layer=layer)
-                self.sbc(cx=coords[0], cy=coords[1], CX=coords[2], CY=coords[3])
-                self.view.insert([choice])
-            elif hovered is False:
-                self.last_focus[("_editor_menu", layer)] = time()
-            elif self.last_focus[("_editor_menu", layer)] is not None and time() - self.last_focus[("_editor_menu", layer)] > self.menu_hoover_timeout:
-                renpy.hide_screen("_editor_menu", layer=layer)
-
-
-        def get_suggestions(self, layer="transient"):
+        def add_suggestion_menu(self):
             self.select_word()
-            coords = self.ordered_cursor_coordinates()
-
-            char_width = config.screen_width / self.view.maxCharPerLine
-            char_height = config.screen_height / self.view.maxLinesPerScreen
-
-            suggestions = self.view.data.formatter.lang.candidates(self.view.get_selected())
-
-            x = int(self.cx * char_width)
-            wordlen_max = max(map(lambda x: len(x), suggestions))
-            width = int(wordlen_max * char_width)
-            height = int(len(suggestions) * char_height)
-
-            if self.cy + 1 + len(suggestions) <= self.view._max_lines or self.cy - len(suggestions) < 0:
-                y = int((1 + self.cy) * char_height)
-            else:
-                y = int((self.cy - len(suggestions)) * char_height)
-
-            self.last_focus[("_editor_menu", layer)] = time()
-
+            choices = self.view.suggestions_for_selected()
             renpy.redraw(self, 0)
-            self.is_mouse_pressed = False
-            renpy.show_screen("_editor_menu", area=(x, y, width, height), choices=suggestions, handler=self.suggestion_or_hover_timout, timer=0.5, layer=layer, _layer=layer, coords=coords)
+            Editor.is_mouse_pressed = False
+
+            cw = config.screen_width / TextView.get_max_char_per_line()
+            ch = config.screen_height / self.view.get_max_lines_per_screen()
+
+            x = int(Editor.cx * cw)
+            if Editor.cy + 1 + len(choices) <= TextView._max_lines or Editor.cy - len(choices) < 0:
+                y = int((1 + Editor.cy) * ch)
+            else:
+                y = int((Editor.cy - len(choices)) * ch)
+
+            coords = self.ordered_cursor_coordinates()
+            def replacer(menu, pick):
+                if pick:
+                    self.sbc(cx=coords[0], cy=coords[1], CX=coords[2], CY=coords[3])
+                    self.view.insert([pick])
+                return pick
+
+            Editor.suggestion_menu=SelectionMenu(x=x, y=y, cw=cw, ch=ch, font=TextView.font['name'], font_size=TextView.font['size'], choices=choices, layer="transient", handler=replacer, options={'timeout':(1.5, 0.2)})
             renpy.restart_interaction()
 
+        def add_context_menu(self):
+            def devlogger(menu, pick):
+                if isinstance(pick, basestring):
+                    pick = menu.id + '\t' + pick
+                    devlog.info(pick)
+                    return pick
+                else:
+                    return None
+
+            cw = config.screen_width / TextView.get_max_char_per_line()
+            ch = config.screen_height / TextView.get_max_lines_per_screen()
+
+            Editor.context_menu=SelectionMenu(x=Editor.mousex, y=Editor.mousey, cw=cw, ch=ch, font=TextView.font['name'], font_size=TextView.font['size'], choices=self.context_options, layer="transient", handler=devlogger)
+
+
+    class SelectionMenu(renpy.Displayable):
+        required_init_args = {'x', 'y', 'cw', 'ch', 'font', 'font_size', 'choices', 'handler', 'layer'}
+        def __init__(self, id="", base_menu=None, options=None, **kwargs):
+            if renpy.get_screen("_editor_menu", layer=kwargs['layer']):
+                return renpy.end_interaction("") and None
+
+            for arg in self.required_init_args:
+                setattr(self, arg, kwargs[arg])
+                del kwargs[arg]
+            super(SelectionMenu, self).__init__(**kwargs)
+
+            self.__dict__.update({"id": id, "base_menu": base_menu, "options": options if options else {}})
+
+            wordlen_max = max(map(lambda x: len(x if isinstance(x, basestring) else x["name"]) + 1, self.choices))
+            self.area = (self.x, self.y, int(wordlen_max * self.cw), int(len(self.choices) * self.ch))
+            self.nested_menu = []
+            self.focus()
+
+            if base_menu:
+                renpy.show_screen("_editor_menu", self, _layer=self.layer)
+            else:
+                renpy.invoke_in_new_context(renpy.call_screen, "_editor_menu", self, _layer=self.layer)
+
+        def focus(self, keep=False):
+            self.is_visible=True
+            if 'timeout' in self.options and keep is False:
+                self.timeout = self.options['timeout'][0]
+                self.polling = self.options['timeout'][1]
+                self.last_focus = time()
+            else:
+                self.timeout = 0.0
+            if self.base_menu:
+                self.base_menu.focus(keep)
+
+        def act(self, pick=None, hovered=None):
+            """selection, (un)hover event or timeout"""
+            if pick != None:
+                index, pick = pick
+                if isinstance(pick, basestring):
+                    renpy.end_interaction(self.handler(self, pick))
+                elif 'submenu' in pick:
+                    kwargs = dict((k, getattr(self, k)) for k in self.required_init_args)
+                    kwargs['choices'] = pick["submenu"]
+                    kwargs['id'] = self.id + "\t" + pick['name']
+                    try:
+                        kwargs['layer'] = config.layers[config.layers.index(self.layer)+1]
+                    except ValueError:
+                        kwargs['layer'] = "transient"
+                    kwargs['y'] = int(kwargs['y'] + index * self.ch)
+                    kwargs['x'] = int(kwargs['x'] + self.area[2])
+                    self.nested_menu.append(SelectionMenu(base_menu=self, **kwargs))
+            elif hovered is True:
+                self.focus(keep=True)
+            elif hovered is False:
+                self.focus()
+            elif self.timeout != 0.0 and time() - self.last_focus > self.timeout:
+                renpy.end_interaction(self.handler(self, "")) # does not end with None response
+
+        def render(self, width, height, st, at):
+            R = renpy.Render(width, height)
+            renpy.redraw(self, 1)
+            return R
+
+        def visit(self):
+            return self.nested_menu
 
 init 1701 python in _editor:
-
-    if config.developer or config.editor:
-        editor = Editor()
 
     def hyperlink_styler_wrap(target):
         if len(target) <= 8 or target[0:8] != "_editor:":
@@ -715,103 +810,72 @@ init 1701 python in _editor:
             return hyperlink_callback(target)
 
         if not renpy.get_screen("_editor_menu", layer="transient"):
-            editor.get_suggestions(layer="transient")
+            editor.add_suggestion_menu()
 
-    def hide_all_screens_with_name(name, layer):
+    def hide_all_screens_with_name(name, layer=None):
         while renpy.get_screen(name, layer=layer):
             renpy.hide_screen(name, layer=layer)
 
-    style.default.hyperlink_functions = (hyperlink_styler_wrap, hyperlink_callback_wrap, None)
+    if config.developer or config.editor:
+        editor = Editor()
+
+        style.default.hyperlink_functions = (hyperlink_styler_wrap, hyperlink_callback_wrap, None)
+
+    def get_font(name=TextView.font['name']):
+        return TextView.fonts[name][0] + "/" + name + ".ttf"
 
 init 1702:
-    style _editor:
-        # must be monospace or need/add shadow
-        font _editor.fonts[_editor.font][0] + "/" + _editor.font + ".ttf"
-        size _editor.fontsize
-
-    style _editor_frame:
-        padding (0, 0)
-        pos (0, 0)
-        background "#272822"
-
-    style _editor_window:
-        align (0.5, 1.0)
-        background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
-
-    style _editor_error is _editor:
-        size int(_editor.fontsize * 0.80)
+    style _editor_error:
+        font _editor.get_font("Inconsolata-Regular")
+        size 22
         color "#d00"
         hover_color "#f11"
         hover_underline True
 
-    style _editor_search is _editor:
-        align (0.5, 0.5)
-        background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
-        padding gui.namebox_borders.padding
-
-    style _editor_menu_frame:
-        padding (0, 0)
-        background "#111a"
-
-    style _editor_textbutton is _editor:
+    style _editor_textbutton:
+        font _editor.get_font("Inconsolata-Regular")
+        size 28
         color "#fff"
         hover_color "ff2"
 
 
-screen _editor_find(layer="overlay"):
-    default editor = _editor.editor
-    default view = editor.view
+screen _editor_menu(selection):
+    if selection.timeout != 0.0:
+        timer selection.polling action Function(selection.act) repeat True
     frame:
-        align (0.5, 0.5)
-        background AlphaMask(Image("gui/frame.png", gui.confirm_frame_borders), mask="#000a")
+        padding (0, 0)
+        background "#111a"
+        area selection.area
+        add selection
         vbox:
-            align (0.4, 0.5)
-            text "Enter search string:\n":
-                size 20
-                color "#fff"
-
-            add Input(hover_color="#3399ff",size=28, color="#afa", default=view.search_string, changed=view.search_init, length=256)
-            hbox:
-                textbutton "OK":
-                    text_style "_editor_textbutton"
-                    action Function(view.search)
-                    keysym('K_RETURN', 'K_KP_ENTER')
-                textbutton "Cancel":
-                    text_style "_editor_textbutton"
-                    action Hide("_editor_find", layer=layer)
-                    keysym('K_ESCAPE')
-
-
-screen _editor_menu(area, choices, handler, timer=None, layer="transient", coords=coords):
-    default editor = _editor.editor
-    style_prefix "_editor_menu"
-    if timer is not None:
-        timer timer action Function(handler, layer=layer, coords=coords) repeat True
-    frame:
-        area area
-        vbox:
-            for choice in choices:
-                textbutton (choice if isinstance(choice, basestring) else choice["name"]):
+            for (index, pick) in enumerate(selection.choices):
+                textbutton (pick if isinstance(pick, basestring) else pick["name"]):
                     padding (0, 0)
                     minimum (0, 0)
-                    text_style "_editor_textbutton"
-                    hovered Function(handler, layer=layer, coords=coords, choice=choice, hovered=True)
-                    unhovered Function(handler, layer=layer, coords=coords, hovered=False)
-                    action Function(handler, layer=layer, coords=coords, choice=choice)
-
-        key "K_ESCAPE" action Hide("_editor_menu", _layer=layer)
+                    text_font _editor.get_font(selection.font)
+                    text_size selection.font_size
+                    text_color "#fff"
+                    text_hover_color "ff2"
+                    hovered Function(selection.act, hovered=True)
+                    unhovered Function(selection.act, hovered=False)
+                    action Function(selection.act, pick=(index, pick))
+        key "K_ESCAPE" action Hide("_editor_menu")
 
 
 screen _editor_main:
     layer "master"
-    style_prefix "_editor"
     default editor = _editor.editor
     default view = editor.view
     frame:
+        padding (0, 0)
+        pos (0, 0)
+        background "#272822"
         add editor
-        text view.display() style "_editor"
+        text view.display() font _editor.get_font() size view.font['size']
         if view.show_errors:
             window:
+                align (0.5, 1.0)
+                background Frame("gui/namebox.png", gui.namebox_borders, tile=gui.namebox_tile, xalign=gui.name_xalign)
                 text view.show_errors style "_editor_error"
 
         for keystr in sorted(view.keymap, key=len):
@@ -863,10 +927,11 @@ screen _editor_main:
         key "K_KP_EQUALS" action Function(view.insert, ["="])
 
         if renpy.get_screen("_editor_menu"):
-            key 'mousedown_1' action Function(_editor.hide_all_screens_with_name, "_editor_menu", layer="transient")
+            key 'mousedown_1' action Function(_editor.hide_all_screens_with_name, "_editor_menu")
         elif renpy.get_screen("_editor_find"):
             key 'mousedown_1' action Hide("_editor_find")
-
+        else:
+            key 'mouseup_3' action Function(editor.add_context_menu)
         hbox:
             style_prefix "quick"
             align (0.5, 1.0)
@@ -880,7 +945,34 @@ screen _editor_main:
                 textbutton _("Cancel") action [Function(editor.exit, discard = True), Return()]
             textbutton _("Visual") action [Function(editor.exit), Return()]
             if view.data.formatter.do_check:
-                textbutton _("No check") action Function(editor.set_spellcheck_modus, False)
+                textbutton _("No check") action Function(view.set_spellcheck_modus, False)
             else:
-                textbutton _("Suggest") action Function(editor.set_spellcheck_modus, True)
+                textbutton _("Suggest") action Function(view.set_spellcheck_modus, True)
+
+# FIXME: should a call_screen and a reusable renpy.displayable that supports tabs among others.
+screen _editor_find(layer="overlay"):
+    #TODO Regex replace
+    default editor = _editor.editor
+    default view = editor.view
+    frame:
+        align (0.5, 0.5)
+        background AlphaMask(Image("gui/frame.png", gui.confirm_frame_borders), mask="#000a")
+        vbox:
+            align (0.4, 0.5)
+            text "Enter search string:\n":
+                size 20
+                color "#fff"
+
+            add Input(hover_color="#3399ff",size=28, color="#afa", default=view.search_string, changed=view.search_init, length=256)
+            hbox:
+                textbutton "OK":
+                    text_style "_editor_textbutton"
+                    action Function(view.search)
+                    keysym('K_RETURN', 'K_KP_ENTER')
+                textbutton "Cancel":
+                    text_style "_editor_textbutton"
+                    action Hide("_editor_find", layer=layer)
+                    keysym('K_ESCAPE')
+
+
 
