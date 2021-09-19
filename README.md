@@ -13,7 +13,19 @@ git clone --depth 2 --filter=blob:none --sparse https://github.com/chrissimpkins
 cd game/codeface
 git sparse-checkout set 'fonts/proggy-clean' 'fonts/inconsolata/'
 cd -
+```
 
+Actually Russian language was not included by default. This may fix it and add some updates for other languages:
+```bash
+git clone --depth 2 --filter=blob:none --sparse https://github.com/barrust/pyspellchecker.git ./pyspellchecker
+
+cd pyspellchecker
+git sparse-checkout set spellchecker/resources/{de,en,es,fr,pt,ru}.json.gz
+cd -
+cp pyspellchecker/spellchecker/resources/* python-packages/spellchecker/resources/
+```
+
+```bash
 # in windows msdos I believe you can use `python -m pip' instead of pip
 pip install --target ./game/python-packages pyperclip
 
