@@ -1,5 +1,6 @@
 # formatter for renpy and python code
 from pygments.formatter import Formatter
+from pygments.token import Error
 from spellchecker import SpellChecker
 from re import split as re_split
 
@@ -21,7 +22,7 @@ class RenPyFormatter(Formatter):
             if style['color']:
                 start += '{color=#%s}' % style['color'].lower()
                 end = '{/color}' + end
-            #, 'bold' moves the input line so won't work
+            # 'bold' moves the input line so won't work
             for s in ['italic', 'underline']:
                 if style[s]:
                     start += '{'+s[0]+'}'
@@ -77,4 +78,20 @@ class RenPyFormatter(Formatter):
             outfile.write(stylebegin + lastval + styleend)
 
     def get_style_defs(self, arg=None):
-        return (self.style.background_color, self.style.highlight_color)
+        if arg == "background":
+            return self.style.background_color
+        if arg == "highlight":
+            return self.style.highlight_color
+        if arg != "error" and arg != "error background":
+            raise KeyError
+
+        error = "#f11" if 'border:' in self.style.styles[Error] else self.style.styles[Error]
+        error_background = self.style.background_color
+
+        for e in error.split():
+            if e[:3] == 'bg:':
+                error_background = e[3:]
+            elif arg == "error":
+                return e
+
+        return error_background

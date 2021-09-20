@@ -152,6 +152,7 @@ init -1700 python in _editor:
         def set_format(self, language=None, style=None):
             from renpyformatter import RenPyFormatter
             self.formatter = RenPyFormatter(language=language or self.language, style=style or self.style)
+            self.set_error_style()
 
         def parse(self, force=False):
             """ If changes were not yet parsed, check for errors; create colored_buffer for view on screen """
@@ -165,8 +166,16 @@ init -1700 python in _editor:
                 # NOTE: must split on newline here, not os.linesep, or it won't work in windows
                 self.colored_buffer = highlight(escaped, self.lexer, self.formatter).split('\n')
 
-        def get_background_highlight(self):
-            return self.formatter.get_style_defs()
+        def get_color(self, arg):
+            return self.formatter.get_style_defs(arg)
+
+        def set_error_style(self):
+            style._editor_error.font = get_font("Inconsolata-Regular")
+            style._editor_error.size = TextView.font['size']
+            style._editor_error.color = self.get_color("error")
+            style._editor_error.background = self.get_color("error background")
+            style._editor_error.hover_underline = True
+
 
     class TextView(object):
 
@@ -206,6 +215,7 @@ init -1700 python in _editor:
 
         def set_font(self, font=None):
             TextView._set_font(*font) if font else TextView._set_font()
+            self.data.set_error_style()
             self.cbuflines = TextView._max_lines
             self.parse()
 
@@ -572,9 +582,8 @@ init -1700 python in _editor:
             proggy = {"name": "ProggyClean", "submenu": range(12, 42)}
             Editor.context_options.append({"name": "font", "submenu": [inconsolata, proggy]})
             Editor.context_options.append({ "name": "language", "submenu": ["de", "en", "es", "fr", "pt", "ru"] })
-            Editor.context_options.append({"name": "style", "submenu": ["abap", "algol", "algol_nu", "arduino", "autumn", "borland", "colorful", "default", "emacs", "friendly", "fruity", "igor", "inkpot", "lovelace", "manni", "monokai", "murphy", "native", "pastie", "perldoc", "rainbow_dash", "rrt", "sas", "tango", "vim", "vs", "xcode"] })
+            Editor.context_options.append({"name": "style", "submenu": ["abap", "algol_nu", "arduino", "autumn", "borland", "colorful", "default", "emacs", "friendly", "fruity", "igor", "inkpot", "lovelace", "manni", "monokai", "murphy", "native", "pastie", "perldoc", "rainbow_dash", "rrt", "sas", "tango", "vim", "vs", "xcode"] })
             # also present but problematic:
-            # "paraiso_dark", "paraiso_light", "stata_dark", "stata_light", "solarized", "trac", "bw", 
             self.is_visible = False
 
         @staticmethod
@@ -601,7 +610,7 @@ init -1700 python in _editor:
             C = R.canvas()
             dx = width / TextView.get_max_char_per_line()
             dy = height / TextView.get_max_lines_per_screen()
-            selection = self.view.data.get_background_highlight()[1]
+            selection = self.view.data.get_color("highlight")
             if Editor.cy == Editor.CY:
                 if Editor.CX == Editor.cx:
                     C.line((255,255,255,255),(Editor.cx*dx,Editor.cy*dy),(Editor.cx*dx, (Editor.cy+1.0)*dy))
@@ -854,13 +863,6 @@ init 1701 python in _editor:
         return TextView.fonts[name][0] + "/" + name + ".ttf"
 
 init 1702:
-    style _editor_error:
-        font _editor.get_font("Inconsolata-Regular")
-        size 22
-        color "#d00"
-        hover_color "#f11"
-        hover_underline True
-
     style _editor_textbutton:
         font _editor.get_font("Inconsolata-Regular")
         size 28
@@ -898,7 +900,7 @@ screen _editor_main:
     frame:
         padding (0, 0)
         pos (0, 0)
-        background view.data.get_background_highlight()[0]
+        background view.data.get_color("background")
         add editor
         text view.display() font _editor.get_font() size view.font['size']
         if view.show_errors:
