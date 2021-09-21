@@ -4,160 +4,31 @@ init -1700 python in _editor:
     import re
     from time import time
     import pygame
+    from renpy_lexer import RenPyLexer
+    from renpyformatter import RenPyFormatter
+    from pygments import highlight
+    from visual_runtime_editor import ReadWriteBuffer, LogList, LogDict
+    #import visual_runtime_editor
 
-    class History(object):
-        def __init__(self):
-            # FIXME: could change elements to dicts with {line: {pre: state, post: state}}
-            # only insert is a bit harder.
-            self._undo = [{"sbc": {"lnr": None, "cx": None, "cy": None}}]
-            self.rewrite_history = True # disable this while undoing / redoing
-            self.at = -1
-            self.changed = True
-
-        def update_cursor(self, editor, force=False):
-            """ cursor update triggers new history entry unless part of a combined edit action """
-            mouse = "; mouse: {0}, {1}".format(Editor.mousex, Editor.mousey) if hasattr(Editor, "mousey") else ""
-            config.window_title = Editor.fname + ": line %d+%d, char %d%s" % (editor.view.lnr, Editor.cy, Editor.cx, mouse)
-            if len(self._undo[len(self._undo) - 1]) != 1:
-                if self.rewrite_history:
-                    self._undo = self._undo[:(self.at+1)]
-
-                self._undo.append({})
-            last = len(self._undo) - 1
-            if force or len(self._undo[last]) == 0 or self._undo[last]["sbc"]["cx"] is None:
-                self._undo[last]["sbc"] = editor.view.coords
-
-        def append(self, func_ndx_key, args):
-            """ appends to history. also undo populates this, to allow redo """
-
-            if self.rewrite_history and (self.at == -1 or self.at < len(self._undo) - 2 or (self.at == len(self._undo) - 2)):
-                self.at += 1
-                self._undo = self._undo[:(self.at+1)]
-                if len(self._undo[self.at]) > 1:
-                    self._undo[self.at] = {"sbc": self._undo[self.at-1]["sbc"]}
-            elif self.at == len(self._undo):
-                self._undo.append({"sbc": self._undo[self.at-1]["sbc"]})
-
-            if func_ndx_key not in self._undo[self.at]:
-                self._undo[self.at][func_ndx_key] = args
-            self.changed = True
-
-        def _undo_redo_helper(self, view, is_undo):
-            from operator import itemgetter
-            action = self._undo[self.at]
-            self._undo[self.at] = {"sbc": view.coords}
-            self.rewrite_history = False
-            for (fn, args) in sorted(action.items(), key=itemgetter(0)):
-                if fn == "sbc":
-                    view.console.sbc(**args)
-                else:
-                    getattr(view.data, fn[0])(fn[1], *args)
-            self.rewrite_history = True
-            view.parse()
-            renpy.redraw(view.console, 0)
-
-        def undo(self, view):
-            if self.at >= 0:
-                if self.at == len(self._undo):
-                    self.at -= 1
-                if self.at != 0 and len(self._undo[self.at]) == 1:
-                    self.at -= 1
-                elif self.at == len(self._undo) - 1:
-                    self._undo.append({"sbc": view.coords})
-                self._undo_redo_helper(view, is_undo=True)
-                self.at -= 1
-
-        def redo(self, view):
-            if self.at < len(self._undo) - 1:
-                self.at += 1
-                self._undo_redo_helper(view, is_undo=False)
-                if self.at == len(self._undo) - 1 and len(self._undo[self.at]) == 1:
-                    self.at += 1
-
-        def is_changed(self):
-            ret, self.changed = (self.changed, False)
-            return ret
+    # further specified when formatter is loaded (RenpyBuffer)
+    style._editor_error = renpy.style.Style(style.default)
 
 
-    class ReadOnlyData(object):
-        """ container and load interface for read only data """
-        def __init__(self, fname): self.load(fname)
-        def __getitem__(self, ndx): return self.data[ndx]
-        def __len__(self): return len(self.data)
-
-        def load(self, fname=None):
-            from codecs import open as open_codecs
-            if fname is not None:
-                self.fname = fname
-            self.data = []
-            for line in open_codecs(self.fname, encoding='utf-8'):
-                self.data.append(line.rstrip(u"\r\n"))
-
-
-    class ReadWriteData(ReadOnlyData):
-        """ also allows edit and save """
-        def __init__(self, fname):
-            super(ReadWriteData, self).__init__(fname)
-            self.history = History()
-            self.start_change = 0
-
-        @property
-        def changed(self):
-            return len(self.history._undo) > self.start_change
-
-        def __setitem__(self, ndx, value):
-            if value != self.data[ndx]:
-                self.history.append(("__setitem__", ndx), [self.data[ndx]])
-                self.data[ndx] = value
-
-        def load(self, fname=None):
-            super(ReadWriteData, self).load(fname)
-            self.history = History()
-
-        def save(self):
-            from shutil import move
-            from tempfile import mkstemp
-            if self.changed:
-                fh, abs_path = mkstemp()
-                for line in self.data:
-                    os.write(fh, line + os.linesep)
-                os.close(fh)
-                move(abs_path, self.fname)
-                self.start_change = len(self.history._undo)
-
-        def __delitem__(self, ndx):
-            k = ("insert", (ndx.start, ndx.stop)) if isinstance(ndx, slice) else ("insert", ndx)
-            ndx = slice(*ndx) if isinstance(ndx, tuple) else ndx
-            self.history.append(k, [self.data[ndx]])
-            del(self.data[ndx])
-
-        def insert(self, ndx, value):
-            self.history.append(("__delitem__", ndx), [])
-            if isinstance(ndx, tuple):
-                self.data[ndx[0]:ndx[0]] = value
-            else:
-                self.data.insert(ndx, value)
-
-
-    class RenPyData(ReadWriteData):
-        def __init__(self, fname, language='en', style='monokai'):
-            # should also support ru, es, fr, pt and de
-            from renpy_lexer import RenPyLexer
-            super(RenPyData, self).__init__(fname)
-            self.language = language
-            self.style = style
-            self.set_format(language, style)
+    class RenPyBuffer(ReadWriteBuffer):
+        """ layer formating to display the buffer as text in a ren'py screen """
+        def __init__(self, language='en', style='monokai'):
+            super(RenPyBuffer, self).__init__(fname=Editor.fname)
+            self.set_format(language, style=style)
             self.lexer = RenPyLexer(stripnl=False)
 
-        def set_format(self, language=None, style=None):
-            from renpyformatter import RenPyFormatter
-            self.formatter = RenPyFormatter(language=language or self.language, style=style or self.style)
+        def set_format(self, language=None, **kwargs):
+            self.language = language or self.language
+            self.formatter = RenPyFormatter(language=self.language, **kwargs)
             self.set_error_style()
 
         def parse(self, force=False):
             """ If changes were not yet parsed, check for errors; create colored_buffer for view on screen """
-            from pygments import highlight
-            if self.history.is_changed() or force:
+            if self.history.changed or force:
                 document = os.linesep.join(self.data)
                 renpy.parser.parse_errors = []
                 renpy.parser.parse(self.fname, document)
@@ -170,7 +41,8 @@ init -1700 python in _editor:
             return self.formatter.get_style_defs(arg)
 
         def set_error_style(self):
-            style._editor_error.font = get_font("Inconsolata-Regular")
+            """ used for suggestion hyperlinks """
+            style._editor_error.font = get_font()
             style._editor_error.size = TextView.font['size']
             style._editor_error.color = self.get_color("error")
             style._editor_error.background = self.get_color("error background")
@@ -261,9 +133,14 @@ init -1700 python in _editor:
                 if err:
                     self.show_errors = re.sub(r'(?<!\{)(\{(\{\{)*)(?!\{)', r'{\1', re.sub(r'(?<!\[)(\[(\[\[)*)(?!\[)', r'[\1', os.linesep.join(err)))
 
+        def update_cursor(self, force=False):
+            mouse = "; mouse: {0}, {1}".format(Editor.mousex, Editor.mousey) if hasattr(Editor, "mousey") else ""
+            config.window_title = Editor.fname + ": line %d+%d, char %d%s" % (self.lnr, Editor.cy, Editor.cx, mouse)
+            self.data.history.update_cursor(self.console, force)
+
         def UP(self, sub=1, new_history_entry=True):
             if new_history_entry:
-                self.data.history.update_cursor(self.console)
+                self.update_cursor()
 
             sub = min(Editor.cy + self.lnr, sub)
             cursor_movement = min(Editor.cy, sub)
@@ -276,7 +153,7 @@ init -1700 python in _editor:
 
         def DOWN(self, add=1, new_history_entry=True):
             if new_history_entry:
-                self.data.history.update_cursor(self.console)
+                self.update_cursor()
             cursor_movement = min(self.nolines - Editor.cy - 1, add)
             add -= cursor_movement
             if cursor_movement:
@@ -298,11 +175,11 @@ init -1700 python in _editor:
             self.DOWN(self.nolines)
 
         def ctrl_HOME(self):
-            self.data.history.update_cursor(self.console)
+            self.update_cursor(self.console)
             Editor.cy = self.lnr = 0
 
         def ctrl_END(self):
-            self.data.history.update_cursor(self.console)
+            self.update_cursor()
             Editor.cy = self.nolines - 1
             self.lnr = len(self.data) - Editor.cy - 1
 
@@ -345,7 +222,7 @@ init -1700 python in _editor:
 
         def LEFT(self, sub=1, new_history_entry=True):
             if new_history_entry:
-                self.data.history.update_cursor(self.console)
+                self.update_cursor()
 
             while Editor.cx < sub and self.wrap2buf[Editor.cy][0]:
                 sub -= Editor.cx + 1
@@ -355,7 +232,7 @@ init -1700 python in _editor:
 
         def RIGHT(self, add=1, new_history_entry=True):
             if new_history_entry:
-                self.data.history.update_cursor(self.console)
+                self.update_cursor()
 
             bx, by = self.wrap2buf[Editor.cy]
             while Editor.cx + add > len(self.line) and bx+Editor.cx <= len(self.data[self.lnr+by]):
@@ -378,17 +255,17 @@ init -1700 python in _editor:
                 self.RIGHT(len(m.group(0)))
 
         def HOME(self):
-            self.data.history.update_cursor(self.console)
+            self.update_cursor()
             Editor.max = 0
 
         def END(self):
-            self.data.history.update_cursor(self.console)
+            self.update_cursor()
             Editor.max = 0xffff
 
         def RETURN(self): self.insert(['',''])
 
         def BACKSPACE(self):
-            self.data.history.update_cursor(self.console, force=True)
+            self.update_cursor(force=True)
             if Editor.cx == Editor.CX and Editor.cy == Editor.CY:
                 if Editor.cx or self.wrap2buf[Editor.cy][0]:
                     self.LEFT(new_history_entry=False)
@@ -406,7 +283,7 @@ init -1700 python in _editor:
             return (sx+cx, sy+self.lnr, ex+CX, ey+self.lnr)
 
         def DELETE(self, force=True):
-            self.data.history.update_cursor(self.console, force=force)
+            self.update_cursor(force=force)
             cx, cy, CX, CY, selection = self.console.ordered_cursor_coordinates()
             sx, sy, ex, ey = self.cursor2buf_coords(cx, cy, CX, CY)
 
@@ -445,7 +322,7 @@ init -1700 python in _editor:
 
         def insert(self, entries=None):
             import pyperclip
-            self.data.history.update_cursor(self.console, force=True)
+            self.update_cursor(force=True)
 
             if entries == None: # paste in absences of entries
                 entries = pyperclip.paste().split(os.linesep)
@@ -664,7 +541,7 @@ init -1700 python in _editor:
         def event(self, ev, x, y, st):
             if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
                 Editor.cx, Editor.cy = self._screen_to_cursor_coordinates(x, y)
-                self.view.data.history.update_cursor(self)
+                self.view.update_cursor()
                 if time() - Editor.timer < 0.5:
                     self.select_word()
                 else:
@@ -692,7 +569,7 @@ init -1700 python in _editor:
                 Editor.fname = os.path.join(renpy.config.basedir, fname)
 
                 if fname not in Editor.buffer:
-                    Editor.buffer[fname] = EditView(console=self, data=RenPyData(Editor.fname), lnr=lnr)
+                    Editor.buffer[fname] = EditView(console=self, data=RenPyBuffer(), lnr=lnr)
                 else:
                     self.view.lnr = lnr
                     self.view.handlekey("END") # NB. call via handlekey triggers cursor redraw.
