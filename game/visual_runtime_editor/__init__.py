@@ -1,7 +1,6 @@
 """ Visual Runtime Editor Module """
-from .history import History
-from .buffer import ReadOnlyBuffer, ReadWriteBuffer
-from .debug_utils import LogDict, LogList
+from .buffer import ReadWriteBuffer
+from .renpy_lexer import RenPyLexer
+from .renpyformatter import RenPyFormatter
 
-__all__ = ["History", "ReadOnlyBuffer", "ReadWriteBuffer", "LogDict",
-           "LogList"]
+__all__ = ["ReadWriteBuffer", "RenPyLexer", "RenPyFormatter"]

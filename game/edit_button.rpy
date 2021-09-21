@@ -4,10 +4,8 @@ init -1700 python in _editor:
     import re
     from time import time
     import pygame
-    from renpy_lexer import RenPyLexer
-    from renpyformatter import RenPyFormatter
     from pygments import highlight
-    from visual_runtime_editor import ReadWriteBuffer, LogList, LogDict
+    from visual_runtime_editor import *
     #import visual_runtime_editor
 
     # further specified when formatter is loaded (RenpyBuffer)
