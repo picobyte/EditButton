@@ -455,8 +455,8 @@ init -1700 python in _editor:
 
         def __init__(self, *a, **b):
             super(Editor, self).__init__(a, b)
-            inconsolata = {"name": "Inconsolata-Regular", "submenu": range(12, 42)}
-            proggy = {"name": "ProggyClean", "submenu": range(12, 42)}
+            inconsolata = {"name": "Inconsolata-Regular", "submenu": range(12, 42, 3)}
+            proggy = {"name": "ProggyClean", "submenu": range(12, 42, 3)}
             Editor.context_options.append({"name": "font", "submenu": [inconsolata, proggy]})
             Editor.context_options.append({ "name": "language", "submenu": ["de", "en", "es", "fr", "pt", "ru"] })
             Editor.context_options.append({"name": "style", "submenu": ["abap", "algol_nu", "arduino", "autumn", "borland", "colorful", "default", "emacs", "friendly", "fruity", "igor", "inkpot", "lovelace", "manni", "monokai", "murphy", "native", "pastie", "perldoc", "rainbow_dash", "rrt", "sas", "tango", "vim", "vs", "xcode"] })
@@ -609,7 +609,7 @@ init -1700 python in _editor:
                 y = int((Editor.cy - len(choices)) * ch)
 
             coords = self.ordered_cursor_coordinates()
-            def replacer(menu, pick):
+            def replacer(pick):
                 if pick:
                     self.sbc(cx=coords[0], cy=coords[1], CX=coords[2], CY=coords[3])
                     self.view.insert([pick])
@@ -619,32 +619,32 @@ init -1700 python in _editor:
             renpy.restart_interaction()
 
         def add_context_menu(self):
-            def devlogger(menu, pick):
-                if isinstance(pick, (dict, renpy.python.RevertableDict)):
-                    return None
-                else:
-                    if menu.id == "language\t":
-                        self.view.data.set_format(language=pick)
-                    elif menu.id == "style\t":
-                        self.view.data.set_format(style=pick)
-                    self.view.parse(force=True)
-                    renpy.redraw(self, 0)
+            def devlogger(pick):
+                if pick[0] == "language":
+                    self.view.data.set_format(language=pick[1])
+                elif pick[0] == "style":
+                    self.view.data.set_format(style=pick[1])
+                elif pick[0] == "font":
+                    self.view.set_font(pick[1:])
+                self.view.parse(force=True)
+                renpy.redraw(self, 0)
 
-                    pick = menu.id + pick
-                    devlog.info(pick)
-                    return pick
+                devlog.info(pick)
+                return ""
 
+            # TODO/FIXME: context menu doesn't have to follow screen/view font parameters
             cw = config.screen_width / TextView.get_max_char_per_line()
             ch = config.screen_height / TextView.get_max_lines_per_screen()
 
-            Editor.context_menu=SelectionMenu(x=Editor.mousex, y=Editor.mousey, cw=cw, ch=ch, font=TextView.font['name'], font_size=TextView.font['size'], choices=self.context_options, layer="transient", handler=devlogger)
+            Editor.context_menu=SelectionMenu(x=Editor.mousex, y=Editor.mousey,
+                                              cw=cw, ch=ch, font=TextView.font['name'],
+                                              font_size=TextView.font['size'], choices=self.context_options,
+                                              layer="master", handler=devlogger)
 
 
     class SelectionMenu(renpy.Displayable):
         required_init_args = {'x', 'y', 'cw', 'ch', 'font', 'font_size', 'choices', 'handler', 'layer'}
         def __init__(self, id="", base_menu=None, options=None, **kwargs):
-            if renpy.get_screen("_editor_menu", layer=kwargs['layer']):
-                return renpy.end_interaction("") and None
 
             for arg in self.required_init_args:
                 setattr(self, arg, kwargs[arg])
@@ -657,14 +657,16 @@ init -1700 python in _editor:
             self.area = (self.x, self.y, int(wordlen_max * self.cw), int(len(self.choices) * self.ch))
             self.nested_menu = []
             self.focus()
+            if renpy.get_screen("_editor_menu", layer=self.layer):
+                self.end()
 
             if base_menu:
+                # XXX: for some reason not shown for overlay layer.
                 renpy.show_screen("_editor_menu", self, _layer=self.layer)
             else:
                 renpy.invoke_in_new_context(renpy.call_screen, "_editor_menu", self, _layer=self.layer)
 
         def focus(self, keep=False):
-            self.is_visible=True
             if 'timeout' in self.options and keep is False:
                 self.timeout = self.options['timeout'][0]
                 self.polling = self.options['timeout'][1]
@@ -674,26 +676,45 @@ init -1700 python in _editor:
             if self.base_menu:
                 self.base_menu.focus(keep)
 
+        def event(self, ev, x, y, st):
+            if ev.type == pygame.MOUSEBUTTONDOWN:
+                self.end()
+
+        def end(self, pick=None):
+            devlog.warn(str(pick))
+            if pick or self.timeout != 0.0:
+                if self.base_menu:
+                    renpy.hide_screen("_editor_menu", layer=self.layer)
+                    if isinstance(pick, (list, renpy.python.RevertableList)):
+                        pick.insert(0, self.id)
+                        self.base_menu.end(pick)
+                    else:
+                        self.base_menu.end([self.id, pick])
+                else:
+                    renpy.end_interaction(self.handler(pick) if pick else None)
+
+
         def act(self, pick=None, hovered=None):
             """selection, (un)hover event or timeout"""
             if pick != None:
                 index, pick = pick
                 if not isinstance(pick, (dict, renpy.python.RevertableDict)):
-                    renpy.end_interaction(self.handler(self, pick))
+                    self.end(pick)
                 elif 'submenu' in pick:
                     kwargs = dict((k, getattr(self, k)) for k in self.required_init_args)
 
                     # TODO/FIXME 1. could implement stacking as cards for menus
                     # TODO/FIXME 2. choose other side if there's no space right of the menu
-                    try:
-                        kwargs['layer'] = config.layers[config.layers.index(self.layer)+1]
-                    except ValueError:
-                        kwargs['layer'] = config.layers[config.layers.index("transient")+1]
+
+                    kwargs['layer'] = config.layers[config.layers.index(self.layer)+1]
+                    # if this errors, you're using too many side menus. use a
+                    # different solution instead.
+
                     if renpy.get_screen("_editor_menu", layer=kwargs['layer']):
                         renpy.hide_screen("_editor_menu", layer=kwargs['layer'])
 
                     kwargs['choices'] = pick["submenu"]
-                    kwargs['id'] = self.id + pick['name'] + "\t"
+                    kwargs['id'] = pick['name']
                     kwargs['y'] = int(kwargs['y'] + index * self.ch)
                     kwargs['x'] = int(kwargs['x'] + self.area[2])
                     self.nested_menu.append(SelectionMenu(base_menu=self, **kwargs))
@@ -702,7 +723,7 @@ init -1700 python in _editor:
             elif hovered is False:
                 self.focus()
             elif self.timeout != 0.0 and time() - self.last_focus > self.timeout:
-                renpy.end_interaction(self.handler(self, "")) # does not end with None response
+                 self.end()
 
         def render(self, width, height, st, at):
             R = renpy.Render(width, height)
@@ -728,8 +749,9 @@ init 1701 python in _editor:
             editor.add_suggestion_menu()
 
     def hide_all_screens_with_name(name, layer=None):
-        while renpy.get_screen(name, layer=layer):
-            renpy.hide_screen(name, layer=layer)
+        for layer in config.layers if layer is None else [layer]:
+            while renpy.get_screen(name, layer=layer):
+                renpy.hide_screen(name, layer=layer)
 
     if config.developer or config.editor:
         editor = Editor()

@@ -19,7 +19,7 @@ class RenPyLexer(RegexLexer):
     def innerstring_rules(ttype):
         return [
             # the old style '%s' % (...) string formatting
-            (r'%(\(\w+\))?[-#0 +]*([0-9]+|[*])?(\.([0-9]+|[*]))?'
+            (r'%(\([a-zA-Z0-9_]+\))?[-#0 +]*([0-9]+|[*])?(\.([0-9]+|[*]))?'
              '[hlL]?[diouxXeEfFgGcrs%]', String.Interpol),
             # backslashes, quotes and formatting signs must be parsed one at a time
             (r'[^\\\'"%\n]+', ttype),
@@ -71,16 +71,16 @@ class RenPyLexer(RegexLexer):
         ],
 
         'label': [
-            ('[a-zA-Z_]\w*', Name.Label, '#pop')
+            ('[a-zA-Z_][a-zA-Z0-9_]*', Name.Label, '#pop')
         ],
         'define': [
-            ('[a-zA-Z_]\w*', Name.Variable, '#pop')
+            ('[a-zA-Z_][a-zA-Z0-9_]*', Name.Variable, '#pop')
         ],
         'screen': [
-            ('[a-zA-Z_]\w*', Name.Class, '#pop')
+            ('[a-zA-Z_][a-zA-Z0-9_]*', Name.Class, '#pop')
         ],
         'style': [
-            ('[a-zA-Z_]\w*', Name.Property, '#pop')
+            ('[a-zA-Z_][a-zA-Z0-9_]*', Name.Property, '#pop')
         ],
         'python-content': [
             (r'(\s*)(\$)',
@@ -144,20 +144,20 @@ class RenPyLexer(RegexLexer):
             ('`.*?`', String.Backtick),
         ],
         'name': [
-            (r'@[\w.]+', Name.Decorator),
-            ('[a-zA-Z_]\w*', Name),
+            (r'@[[a-zA-Z0-9_].]+', Name.Decorator),
+            ('[a-zA-Z_][a-zA-Z0-9_]*', Name),
         ],
         'funcname': [
-            ('[a-zA-Z_]\w*', Name.Function, '#pop')
+            ('[a-zA-Z_][a-zA-Z0-9_]*', Name.Function, '#pop')
         ],
         'classname': [
-            ('[a-zA-Z_]\w*', Name.Class, '#pop')
+            ('[a-zA-Z_][a-zA-Z0-9_]*', Name.Class, '#pop')
         ],
         'import': [
             (r'(?:[ \t]|\\\n)+', Text),
             (r'as\b', Keyword.Namespace),
             (r',', Operator),
-            (r'[a-zA-Z_][\w.]*', Name.Namespace),
+            (r'[a-zA-Z_][[a-zA-Z0-9_].]*', Name.Namespace),
             default('#pop')  # all else: go back
         ],
         'fromimport': [
@@ -167,7 +167,7 @@ class RenPyLexer(RegexLexer):
             # never be a module name
             (r'None\b', Name.Builtin.Pseudo, '#pop'),
             # sadly, in "raise x from y" y will be highlighted as namespace too
-            (r'[a-zA-Z_.][\w.]*', Name.Namespace),
+            (r'[a-zA-Z_.][[a-zA-Z0-9_].]*', Name.Namespace),
             # anything else here also means "raise x from y" and is therefore
             # not an error
             default('#pop'),
