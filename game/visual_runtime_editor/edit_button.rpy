@@ -442,7 +442,7 @@ init -1700 python in _editor:
             renpy.redraw(self.console, 0)
 
     class Editor(renpy.Displayable):
-        mousex = mousy = fname = view = context_menu = None
+        mousex = mousey = fname = view = context_menu = None
         context_options = []
         buffer = {}
         timer = time()
