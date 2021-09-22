@@ -15,13 +15,15 @@ init -1700 python in _editor:
     class RenPyBuffer(ReadWriteBuffer):
         """ layer formating to display the buffer as text in a ren'py screen """
         def __init__(self, language='en', style='monokai'):
+            self.style = style
             super(RenPyBuffer, self).__init__(fname=Editor.fname)
             self.set_format(language, style=style)
             self.lexer = RenPyLexer(stripnl=False)
 
-        def set_format(self, language=None, **kwargs):
+        def set_format(self, language=None, style=None, **kwargs):
             self.language = language or self.language
-            self.formatter = RenPyFormatter(language=self.language, **kwargs)
+            self.style = style or self.style
+            self.formatter = RenPyFormatter(language=self.language, style=self.style, **kwargs)
             self.set_error_style()
 
         def parse(self, force=False):
