@@ -877,7 +877,7 @@ screen _editor_find(layer="overlay"):
                     keysym('K_RETURN', 'K_KP_ENTER')
                 textbutton "Cancel":
                     text_style "_editor_textbutton"
-                    action Hide("_editor_find", layer=layer)
+                    action Hide("_editor_find", _layer=layer)
                     keysym('K_ESCAPE')
 
 
