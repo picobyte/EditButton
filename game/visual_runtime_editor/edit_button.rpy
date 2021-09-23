@@ -69,24 +69,25 @@ init -1700 python in _editor:
             self.keymap = set(['mousedown_4', 'mousedown_5'])
             self._add_km(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['repeat_', ''])
             self._add_km(['HOME', 'END'], ['ctrl_'])
-            self.set_font(font)
+            self.set_font(font or (TextView.font["name"], TextView.font["size"]))
 
         @staticmethod
-        def _set_font(name=font['name'], size=font['size']):
-            TextView._max_lines = int(TextView.get_max_lines_per_screen(name, size))
-            devlog.info(str(TextView._max_lines))
-            TextView.font = {"name": name, "size": size}
-
-        @staticmethod
-        def get_max_char_per_line(name=font['name'], size=font['size']):
+        def get_max_char_per_line(name=None, size=None):
+            name = name or TextView.font['name']
+            size = size or TextView.font['size']
             return TextView.fonts[name][1] * 3840.545 / size
 
         @staticmethod
-        def get_max_lines_per_screen(name=font['name'], size=font['size']):
+        def get_max_lines_per_screen(name=None, size=None):
+            name = name or TextView.font['name']
+            size = size or TextView.font['size']
             return TextView.fonts[name][2] * (2.3 + 912.0 / size)
 
         def set_font(self, font=None):
-            TextView._set_font(*font) if font else TextView._set_font()
+            if font:
+                TextView.font['name'] = font[0]
+                TextView.font['size'] = font[1]
+                TextView._max_lines = int(TextView.get_max_lines_per_screen())
             self.data.set_error_style()
             self.cbuflines = TextView._max_lines
             self.parse()
