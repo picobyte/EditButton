@@ -194,8 +194,8 @@ init -1700 python in _editor:
             super(EditView, self).__init__(**kwargs)
 
             self._add_km(['BACKSPACE', 'DELETE', 'RETURN'], ['repeat_', ''])
-            self._add_km(['HOME', 'END'], ['shift_', ''])
-            self._add_km(['LEFT', 'RIGHT'], ['shift_', 'ctrl_', 'ctrl_shift_', 'repeat_ctrl_shift_','', 'repeat_shift_', 'repeat_ctrl_', 'repeat_'])
+            self._add_km(['HOME', 'END'], ['shift_', 'ctrl_', 'ctrl_shift_', ''])
+            self._add_km(['LEFT', 'RIGHT'], ['shift_', 'ctrl_', 'ctrl_shift_', 'repeat_ctrl_shift_', '', 'repeat_shift_', 'repeat_ctrl_', 'repeat_'])
             self._add_km(['UP', 'DOWN'], ['shift_', 'repeat_shift_'])
             Editor.max = 0xffff
             # FIXME: this is QWERTY keyboard specific.
@@ -815,16 +815,7 @@ screen _editor_main:
         key "shift_K_RETURN" action [Function(editor.exit, apply = True), Return()]
         key "shift_K_KP_ENTER" action [Function(editor.exit, apply = True), Return()]
 
-        for keystr in 'zy':
-            key 'ctrl_K_'+keystr action Function(view.handlekey, 'ctrl_K_'+keystr)
-            key 'repeat_ctrl_K_'+keystr action Function(view.handlekey, 'repeat_ctrl_K_'+keystr)
-
         key "K_ESCAPE" action [Function(editor.exit), Return()]
-
-        key "ctrl_K_c" action Function(view.copy)
-        key "ctrl_K_f" action Show("_editor_find")
-        key "ctrl_K_v" action Function(view.insert)
-        key "ctrl_K_x" action Function(view.cut)
 
         key "K_TAB" action Function(view.insert, ["    "])
         key "K_SPACE" action Function(view.insert, [" "])
@@ -856,6 +847,17 @@ screen _editor_main:
         key "K_KP_MINUS" action Function(view.insert, ["-"])
         key "K_KP_PLUS" action Function(view.insert, ["+"])
         key "K_KP_EQUALS" action Function(view.insert, ["="])
+
+        key "ctrl_K_a" action [Function(view.ctrl_HOME), Function(view.handlekey, "ctrl_shift_K_END")]
+        key "ctrl_K_c" action Function(view.copy)
+        key "ctrl_K_v" action Function(view.insert)
+        key "ctrl_K_x" action Function(view.cut)
+        for keystr in 'zy':
+            key 'ctrl_K_'+keystr action Function(view.handlekey, 'ctrl_K_'+keystr)
+            key 'repeat_ctrl_K_'+keystr action Function(view.handlekey, 'repeat_ctrl_K_'+keystr)
+
+        # probably this should be a renpy.cal_screen or Call
+        key "ctrl_K_f" action Show("_editor_find")
 
         if renpy.get_screen("_editor_menu"):
             key 'mousedown_1' action Function(_editor.hide_all_screens_with_name, "_editor_menu")
