@@ -54,7 +54,8 @@ class ReadWriteBuffer(ReadOnlyBuffer):
 
     def load(self, fname=None, past=None):
         super(ReadWriteBuffer, self).load(fname)
-        self.history = History(past or [{"sbc": {"lnr": None, "cx": None, "cy": None}}])
+        past=past or [{"sbc": {"lnr": None, "cx": None, "cy": None}}]
+        self.history = History(past)
 
     def save(self):
         """ save file """
@@ -79,7 +80,7 @@ class ReadWriteBuffer(ReadOnlyBuffer):
         """ insert into buffer """
         self.history.append(("__delitem__", ndx), [])
         if isinstance(ndx, tuple):
-            # FIXME: this counterintuitive tuple insert is used in undo/redo
+            # FIXME: counterintuitive tuple insert, used in undo/redo
             self.data[ndx[0]:ndx[0]] = value
         else:
             self.data.insert(ndx, value)
