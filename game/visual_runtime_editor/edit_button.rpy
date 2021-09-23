@@ -67,7 +67,7 @@ init -1700 python in _editor:
             self.show_errors = ""
             self.wheel_scroll_lines = wheel_scroll_lines
             self.keymap = set(['mousedown_4', 'mousedown_5'])
-            self._add_km(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['repeat_', ''])
+            self._add_km(['UP', 'DOWN', 'PAGEUP', 'PAGEDOWN'], ['repeat_', 'shift_', 'repeat_shift_', ''])
             self._add_km(['HOME', 'END'], ['ctrl_'])
             self.set_font(font or (TextView.font["name"], TextView.font["size"]))
 
@@ -92,12 +92,16 @@ init -1700 python in _editor:
             self.cbuflines = TextView._max_lines
             self.parse()
 
-        def _add_km(self, km, mod): self.keymap.update([m+'K_'+k for k in km for m in mod])
+        def _add_km(self, km, mod):
+            self.keymap.update([m+'K_'+k for k in km for m in mod])
 
         @property
-        def line(self): return self.wrapped_buffer[Editor.cy]
+        def line(self):
+            return self.wrapped_buffer[Editor.cy]
+
         @property
-        def nolines(self): return len(self.wrapped_buffer)
+        def nolines(self):
+            return len(self.wrapped_buffer)
         @property
         def coords(self):
             return {"lnr": self.lnr, "cx": Editor.cx, "cy": Editor.cy, "CX": Editor.CX, "CY": Editor.CY}
