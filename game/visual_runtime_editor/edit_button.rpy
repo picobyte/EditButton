@@ -99,9 +99,9 @@ init -1700 python in _editor:
         def line(self):
             return self.wrapped_buffer[Editor.cy]
 
-        @property
-        def nolines(self):
+        def nr_of_lines(self):
             return len(self.wrapped_buffer)
+
         @property
         def coords(self):
             return {"lnr": self.lnr, "cx": Editor.cx, "cy": Editor.cy, "CX": Editor.CX, "CY": Editor.CY}
@@ -159,7 +159,7 @@ init -1700 python in _editor:
         def DOWN(self, add=1, new_history_entry=True):
             if new_history_entry:
                 self.update_cursor()
-            cursor_movement = min(self.nolines - Editor.cy - 1, add)
+            cursor_movement = min(self.nr_of_lines() - Editor.cy - 1, add)
             add -= cursor_movement
             if cursor_movement:
                 Editor.cy += cursor_movement
@@ -167,17 +167,17 @@ init -1700 python in _editor:
                 hide_all_screens_with_name("_editor_menu", layer="transient")
                 self.lnr += add
                 self.rewrap()
-                while Editor.cy >= self.nolines:
+                while Editor.cy >= self.nr_of_lines():
                     Editor.cy -= 1
                     self.parse()
             else:
                  Editor.CY = Editor.cy
 
         def PAGEUP(self):
-            self.UP(self.nolines)
+            self.UP(self.nr_of_lines())
 
         def PAGEDOWN(self):
-            self.DOWN(self.nolines)
+            self.DOWN(self.nr_of_lines())
 
         def ctrl_HOME(self):
             self.update_cursor(self.console)
@@ -185,7 +185,7 @@ init -1700 python in _editor:
 
         def ctrl_END(self):
             self.update_cursor()
-            Editor.cy = self.nolines - 1
+            Editor.cy = self.nr_of_lines() - 1
             self.lnr = len(self.data) - Editor.cy - 1
 
         def mousedown_4(self): self.UP(self.wheel_scroll_lines)
@@ -460,8 +460,8 @@ init -1700 python in _editor:
 
         def __init__(self, *a, **b):
             super(Editor, self).__init__(a, b)
-            inconsolata = {"name": "Inconsolata-Regular", "submenu": range(12, 42, 3)}
-            proggy = {"name": "ProggyClean", "submenu": range(12, 42, 3)}
+            inconsolata = {"name": "Inconsolata-Regular", "submenu": range(12, 42, 2)}
+            proggy = {"name": "ProggyClean", "submenu": range(12, 42, 2)}
             Editor.context_options.append({"name": "font", "submenu": [inconsolata, proggy]})
             Editor.context_options.append({ "name": "language", "submenu": ["de", "en", "es", "fr", "pt", "ru"] })
             Editor.context_options.append({"name": "style", "submenu": ["abap", "algol_nu", "arduino", "autumn", "borland", "colorful", "default", "emacs", "friendly", "fruity", "igor", "inkpot", "lovelace", "manni", "monokai", "murphy", "native", "pastie", "perldoc", "rainbow_dash", "rrt", "sas", "tango", "vim", "vs", "xcode"] })
@@ -520,8 +520,8 @@ init -1700 python in _editor:
             Editor.max = int(x * TextView.get_max_char_per_line() / config.screen_width)
             cy = int(y * TextView.get_max_lines_per_screen() / config.screen_height)
 
-            if cy >= self.view.nolines:
-                cy = self.view.nolines - 1
+            if cy >= self.view.nr_of_lines():
+                cy = self.view.nr_of_lines() - 1
             return (min(Editor.max, len(self.view.wrapped_buffer[cy])), cy)
 
         def sbc(self, lnr=None, cx=None, cy=None, CX=None, CY=None):
@@ -852,7 +852,7 @@ screen _editor_main:
         key "K_KP_PLUS" action Function(view.insert, ["+"])
         key "K_KP_EQUALS" action Function(view.insert, ["="])
 
-        key "ctrl_K_a" action [Function(view.ctrl_HOME), Function(view.handlekey, "ctrl_shift_K_END")]
+        key "ctrl_K_a" action [Function(view.handlekey, "ctrl_K_END"), Function(view.handlekey, "ctrl_shift_K_HOME")]
         key "ctrl_K_c" action Function(view.copy)
         key "ctrl_K_v" action Function(view.insert)
         key "ctrl_K_x" action Function(view.cut)
