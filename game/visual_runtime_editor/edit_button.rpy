@@ -460,9 +460,6 @@ init -1700 python in _editor:
 
         def __init__(self, *a, **b):
             super(Editor, self).__init__(a, b)
-            inconsolata = {"name": "Inconsolata-Regular", "submenu": range(12, 42, 2)}
-            proggy = {"name": "ProggyClean", "submenu": range(12, 42, 2)}
-            Editor.context_options.append({"name": "font", "submenu": [inconsolata, proggy]})
             Editor.context_options.append({ "name": "language", "submenu": ["de", "en", "es", "fr", "pt", "ru"] })
             Editor.context_options.append({"name": "style", "submenu": ["abap", "algol_nu", "arduino", "autumn", "borland", "colorful", "default", "emacs", "friendly", "fruity", "igor", "inkpot", "lovelace", "manni", "monokai", "murphy", "native", "pastie", "perldoc", "rainbow_dash", "rrt", "sas", "tango", "vim", "vs", "xcode"] })
             # also present but problematic:
