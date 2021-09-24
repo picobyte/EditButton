@@ -9,11 +9,10 @@ init -1700 python in _editor:
     #import visual_runtime_editor
 
     # further specified when formatter is loaded (RenpyBuffer)
-    style._editor_error = renpy.style.Style(style.default)
 
 
     class RenPyBuffer(ReadWriteBuffer):
-        """ layer formating to display the buffer as text in a ren'py screen """
+        """ layer formating to display a text buffer in a ren'py screen """
         def __init__(self, language='en', style='monokai'):
             self.style = style
             super(RenPyBuffer, self).__init__(fname=Editor.fname)
@@ -21,10 +20,9 @@ init -1700 python in _editor:
             self.lexer = RenPyLexer(stripnl=False)
 
         def set_format(self, language=None, style=None, **kwargs):
-            self.language = language or self.language
-            self.style = style or self.style
-            self.formatter = RenPyFormatter(language=self.language, style=self.style, **kwargs)
-            self.set_error_style()
+            language = self.language = language or self.language
+            style = self.style = style or self.style
+            self.formatter = RenPyFormatter(language=language, style=style, **kwargs)
 
         def parse(self, force=False):
             """ If changes were not yet parsed, check for errors; create colored_buffer for view on screen """
@@ -40,27 +38,35 @@ init -1700 python in _editor:
         def get_color(self, arg):
             return self.formatter.get_style_defs(arg)
 
-        def set_error_style(self):
-            """ used for suggestion hyperlinks """
-            style._editor_error.font = get_font()
-            style._editor_error.size = TextView.font['size']
-            style._editor_error.color = self.get_color("error")
-            style._editor_error.background = self.get_color("error background")
-            style._editor_error.hover_underline = True
-
 
     class TextView(object):
 
-        # mono fonts should be implementable, require tweaking the two ratios.
-        # adjust 1st ratio until selection shadows lines vertically, if shadow is too early, decrease ratio
-        # adjust 2nd ratio until selection shadows a line entirely, if shadow is too short, decrease ratio
+        # mono fonts only, ratios.
+        fonts = {"Inconsolata-Regular": {
+                     #"h": (30.000, -13.887, 2.673),
+                     #"v": (35.967, -17.041, 2.654),
+                     "20": (192.0, 49.1), # line length, height
+                     "30": (128.0, 33.8),
+                     "40": (96.0, 25.0),
+                     "dir": "codeface/fonts/inconsolata"},
+                 "ProggyClean": {
+                     "20": (213.5, 63.6),
+                     "30": (147.5, 43.3),
+                     "40": (106.6, 32.7),
+                     "dir": "codeface/fonts/proggy-clean"},
+                 "SourceCodePro-Regular": {
+                     "20": (160.0, 41.4),
+                     "30": (106.5, 27.7),
+                     "40": (80.0, 21.0),
+                     "dir": "codeface/fonts/source-code-pro"
+                 }}
 
-        fonts = {"Inconsolata-Regular": ("codeface/fonts/inconsolata", 1.0, 1.0),
-                 "ProggyClean": ("codeface/fonts/proggy-clean", 1.166, 1.233)}
-        font = {"name": "Inconsolata-Regular", "size": 28}
+        font = {"name": "Inconsolata-Regular", "size": 30}
+        #font = {"name": "ProggyClean", "size": 40}
+        #font = {"name": "SourceCodePro-Regular", "size": 40}
 
         """keeps track of horizontal position in text. Wrapping is not taken into account for position."""
-        def __init__(self, console, data, font=None, nolines=None, lnr=0, wheel_scroll_lines=3):
+        def __init__(self, console, data, font=None, lnr=0, wheel_scroll_lines=3):
             self.data = data
             self.lnr = lnr
             self.console = console
@@ -75,20 +81,18 @@ init -1700 python in _editor:
         def get_max_char_per_line(name=None, size=None):
             name = name or TextView.font['name']
             size = size or TextView.font['size']
-            return TextView.fonts[name][1] * 3840.545 / size
+            return TextView.fonts[name][str(size)][0]
 
         @staticmethod
         def get_max_lines_per_screen(name=None, size=None):
             name = name or TextView.font['name']
             size = size or TextView.font['size']
-            return TextView.fonts[name][2] * (2.3 + 912.0 / size)
+            return TextView.fonts[name][str(size)][1]
 
-        def set_font(self, font=None):
-            if font:
-                TextView.font['name'] = font[0]
-                TextView.font['size'] = font[1]
-                TextView._max_lines = int(TextView.get_max_lines_per_screen())
-            self.data.set_error_style()
+        def set_font(self, font):
+            TextView.font['name'] = font[0]
+            TextView.font['size'] = font[1]
+            TextView._max_lines = int(TextView.get_max_lines_per_screen())
             self.cbuflines = TextView._max_lines
             self.parse()
 
@@ -154,7 +158,7 @@ init -1700 python in _editor:
             if cursor_movement == 0: # then view moved
                 self.rewrap()
                 # either suggestion screen positions needs to be updated or closed
-                hide_all_screens_with_name("_editor_menu", layer="transient")
+                end_all_screens_with_name("_editor_menu")
 
         def DOWN(self, add=1, new_history_entry=True):
             if new_history_entry:
@@ -164,7 +168,7 @@ init -1700 python in _editor:
             if cursor_movement:
                 Editor.cy += cursor_movement
             elif self.lnr + add < len(self.data): # view movement
-                hide_all_screens_with_name("_editor_menu", layer="transient")
+                end_all_screens_with_name("_editor_menu")
                 self.lnr += add
                 self.rewrap()
                 while Editor.cy >= self.nr_of_lines():
@@ -460,6 +464,10 @@ init -1700 python in _editor:
 
         def __init__(self, *a, **b):
             super(Editor, self).__init__(a, b)
+            inconsolata = {"name": "Inconsolata-Regular", "submenu": [20,30,40]}
+            proggy = {"name": "ProggyClean", "submenu": [20,30,40]}
+            scpro = {"name": "SourceCodePro-Regular", "submenu": [20,30,40]}
+            Editor.context_options.append({"name": "font", "submenu": [inconsolata, proggy, scpro]})
             Editor.context_options.append({ "name": "language", "submenu": ["de", "en", "es", "fr", "pt", "ru"] })
             Editor.context_options.append({"name": "style", "submenu": ["abap", "algol_nu", "arduino", "autumn", "borland", "colorful", "default", "emacs", "friendly", "fruity", "igor", "inkpot", "lovelace", "manni", "monokai", "murphy", "native", "pastie", "perldoc", "rainbow_dash", "rrt", "sas", "tango", "vim", "vs", "xcode"] })
             # also present but problematic:
@@ -539,8 +547,13 @@ init -1700 python in _editor:
             m = re.compile(r'^\w*').match(self.view.data[self.view.lnr+by][bx+Editor.cx:])
             if m:
                 Editor.max = Editor.CX = min(Editor.cx+len(m.group(0)), len(self.view.line))
+        def select_none(self):
+            self.sbc()
 
         def event(self, ev, x, y, st):
+            if ev.type == pygame.MOUSEBUTTONDOWN:
+                end_all_screens_with_name("_editor_menu")
+                renpy.redraw(self, 0)
             if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
                 Editor.cx, Editor.cy = self._screen_to_cursor_coordinates(x, y)
                 self.view.update_cursor()
@@ -551,7 +564,6 @@ init -1700 python in _editor:
                     Editor.CX, Editor.CY = Editor.cx, Editor.cy
                 renpy.redraw(self, 0)
                 Editor.is_mouse_pressed = True
-                hide_all_screens_with_name("_editor_menu", layer="transient")
             elif ev.type == pygame.MOUSEMOTION: # Updates the position of the mouse every time the player moves it
                 Editor.mousex = x
                 Editor.mousey = y
@@ -622,16 +634,16 @@ init -1700 python in _editor:
 
         def add_context_menu(self):
             def devlogger(pick):
-                if pick[0] == "language":
-                    self.view.data.set_format(language=pick[1])
-                elif pick[0] == "style":
-                    self.view.data.set_format(style=pick[1])
-                elif pick[0] == "font":
-                    self.view.set_font(pick[1:])
-                self.view.parse(force=True)
-                renpy.redraw(self, 0)
-
-                devlog.info(pick)
+                if pick != "":
+                    if pick[0] == "language":
+                        self.view.data.set_format(language=pick[1])
+                    elif pick[0] == "style":
+                        self.view.data.set_format(style=pick[1])
+                    elif pick[0] == "font":
+                        self.view.set_font(pick[1:])
+                    self.view.parse(force=True)
+                    renpy.redraw(self, 0)
+                    devlog.info(pick)
                 return ""
 
             # TODO/FIXME: context menu doesn't have to follow screen/view font parameters
@@ -641,7 +653,7 @@ init -1700 python in _editor:
             Editor.context_menu=SelectionMenu(x=Editor.mousex, y=Editor.mousey,
                                               cw=cw, ch=ch, font=TextView.font['name'],
                                               font_size=TextView.font['size'], choices=self.context_options,
-                                              layer="master", handler=devlogger)
+                                              layer="master", handler=devlogger, options={'timeout':(1.5, 0.2)})
 
 
     class SelectionMenu(renpy.Displayable):
@@ -658,9 +670,7 @@ init -1700 python in _editor:
             wordlen_max = max(map(lambda x: len(str(x["name"] if isinstance(x, (dict, renpy.python.RevertableDict)) else x)) + 1, self.choices))
             self.area = (self.x, self.y, int(wordlen_max * self.cw), int(len(self.choices) * self.ch))
             self.nested_menu = []
-            self.focus()
-            if renpy.get_screen("_editor_menu", layer=self.layer):
-                renpy.end_interaction("")
+            self.focus(keep=True)
             if base_menu:
                 # XXX: for some reason not shown for overlay layer.
                 renpy.show_screen("_editor_menu", self, _layer=self.layer)
@@ -678,26 +688,28 @@ init -1700 python in _editor:
                 self.base_menu.focus(keep)
 
         def event(self, ev, x, y, st):
-            if ev.type == pygame.MOUSEBUTTONDOWN:
+            if ev.type == pygame.MOUSEBUTTONDOWN and self.timeout != 0.0:
                 renpy.end_interaction("")
 
-        def end(self, pick=None):
-            devlog.warn(str(pick))
-            if pick or self.timeout != 0.0:
+        def end(self, pick):
+            if pick != "" or self.timeout != 0.0:
                 if self.base_menu:
                     renpy.hide_screen("_editor_menu", layer=self.layer)
+                    self.base_menu.nested_menu.remove(self)
                     if isinstance(pick, (list, renpy.python.RevertableList)):
                         pick.insert(0, self.id)
                         self.base_menu.end(pick)
                     else:
-                        self.base_menu.end([self.id, pick])
+                        self.base_menu.end("" if pick is "" else [self.id, pick])
                 else:
-                    renpy.end_interaction("" if pick is None else self.handler(pick))
-
+                    renpy.end_interaction(self.handler(pick))
 
         def act(self, pick=None, hovered=None):
             """selection, (un)hover event or timeout"""
             if pick != None:
+                self.timeout = 0.0
+                for nested in self.nested_menu:
+                    nested.end("")
                 index, pick = pick
                 if not isinstance(pick, (dict, renpy.python.RevertableDict)):
                     self.end(pick)
@@ -724,7 +736,7 @@ init -1700 python in _editor:
             elif hovered is False:
                 self.focus()
             elif self.timeout != 0.0 and time() - self.last_focus > self.timeout:
-                 self.end()
+                 self.end("")
 
         def render(self, width, height, st, at):
             R = renpy.Render(width, height)
@@ -737,10 +749,17 @@ init -1700 python in _editor:
 init 1701 python in _editor:
 
     def hyperlink_styler_wrap(target):
+        global editor
         if len(target) <= 8 or target[0:8] != "_editor:":
             return hyperlink_styler(target)
 
-        return style._editor_error
+        editor_error = renpy.style.Style(style.default)
+        editor_error.font = get_font()
+        editor_error.size = TextView.font['size']
+        editor_error.color = editor.view.data.get_color("error")
+        editor_error.background = editor.view.data.get_color("error background")
+        editor_error.hover_underline = True
+        return editor_error
 
     def hyperlink_callback_wrap(target):
         if len(target) <= 8 or target[0:8] != "_editor:":
@@ -749,18 +768,18 @@ init 1701 python in _editor:
         if not renpy.get_screen("_editor_menu", layer="transient"):
             editor.add_suggestion_menu()
 
-    def hide_all_screens_with_name(name, layer=None):
-        for layer in config.layers if layer is None else [layer]:
-            while renpy.get_screen(name, layer=layer):
-                renpy.hide_screen(name, layer=layer)
+    def end_all_screens_with_name(name):
+        while renpy.get_screen(name):
+            renpy.end_interaction("")
 
     if config.developer or config.editor:
         editor = Editor()
 
         style.default.hyperlink_functions = (hyperlink_styler_wrap, hyperlink_callback_wrap, None)
 
-    def get_font(name=TextView.font['name']):
-        return TextView.fonts[name][0] + "/" + name + ".ttf"
+    def get_font(name=None):
+        name = name or TextView.font['name']
+        return TextView.fonts[name]['dir'] + "/" + name + ".ttf"
 
 init 1702:
     style _editor_textbutton:
@@ -802,7 +821,7 @@ screen _editor_main:
         pos (0, 0)
         background view.data.get_color("background")
         add editor
-        text view.display() font _editor.get_font() size view.font['size']
+        text view.display() font _editor.get_font() size view.font['size'] justify False kerning 0.0 line_leading 0 newline_indent False #adjust_spacing False
         if view.show_errors:
             window:
                 align (0.5, 1.0)
@@ -860,7 +879,7 @@ screen _editor_main:
         key "ctrl_K_f" action Show("_editor_find")
 
         if renpy.get_screen("_editor_menu"):
-            key 'mousedown_1' action Function(_editor.hide_all_screens_with_name, "_editor_menu")
+            key 'mousedown_1' action Function(_editor.end_all_screens_with_name, "_editor_menu")
         elif renpy.get_screen("_editor_find"):
             key 'mousedown_1' action Hide("_editor_find")
         else:

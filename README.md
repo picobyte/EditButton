@@ -33,7 +33,7 @@ You can also report issues and feature requests there.
 To add the edit button to an existing project, add to your in screens.rpy `screen quick_menu()` (just below the yalign):
 ```renpy
         if config.developer and _editor.editor:
-            textbutton _("Edit") action [_editor.editor.start(renpy.get_filename_line()), ShowMenu('_editor_main')]
+            textbutton _("Edit") keysym "ctrl_K_e" action [_editor.editor.start(renpy.get_filename_line()), ShowMenu('_editor_main')]
 ```
 
 Further requirements are: git, python2, pip and the installation of a few python libraries as described below.
@@ -44,7 +44,7 @@ git clone https://github.com/picobyte/EditButton.git
 git clone --depth 2 --filter=blob:none --sparse https://github.com/chrissimpkins/codeface.git ./game/codeface
 
 cd game/codeface
-git sparse-checkout set 'fonts/proggy-clean' 'fonts/inconsolata/'
+git sparse-checkout set 'fonts/proggy-clean' 'fonts/inconsolata/' 'fonts/hack/' 'fonts/hasklig/' 'fonts/office-code-pro' 'fonts/source-code-pro' 'fonts/anonymous-pro'
 cd -
 ```
 
