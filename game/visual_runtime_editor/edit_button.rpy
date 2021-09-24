@@ -660,8 +660,7 @@ init -1700 python in _editor:
             self.nested_menu = []
             self.focus()
             if renpy.get_screen("_editor_menu", layer=self.layer):
-                self.end()
-
+                renpy.end_interaction("")
             if base_menu:
                 # XXX: for some reason not shown for overlay layer.
                 renpy.show_screen("_editor_menu", self, _layer=self.layer)
@@ -680,7 +679,7 @@ init -1700 python in _editor:
 
         def event(self, ev, x, y, st):
             if ev.type == pygame.MOUSEBUTTONDOWN:
-                self.end()
+                renpy.end_interaction("")
 
         def end(self, pick=None):
             devlog.warn(str(pick))
@@ -693,7 +692,7 @@ init -1700 python in _editor:
                     else:
                         self.base_menu.end([self.id, pick])
                 else:
-                    renpy.end_interaction(self.handler(pick) if pick else None)
+                    renpy.end_interaction("" if pick is None else self.handler(pick))
 
 
         def act(self, pick=None, hovered=None):
