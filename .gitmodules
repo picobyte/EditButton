@@ -1,3 +1,6 @@
 [submodule "game/RVRE"]
 	path = game/RVRE
 	url = https://github.com/picobyte/RVRE
+[submodule "game/codeface"]
+	path = game/codeface
+	url = https://github.com/chrissimpkins/codeface.git
