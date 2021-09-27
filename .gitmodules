@@ -1,0 +1,3 @@
+[submodule "game/RVRE"]
+	path = game/RVRE
+	url = https://github.com/picobyte/RVRE
