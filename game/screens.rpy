@@ -257,8 +257,8 @@ screen quick_menu():
         yalign 1.0
 
         if config.developer and _editor.editor:
-            textbutton _("Edit") keysym "ctrl_K_e" action [Function("_editor.editor.start", renpy.get_filename_line()), ShowMenu('_editor_main')]
-
+            textbutton _("Edit") keysym "ctrl_K_e" action [Function(_editor.editor.start, renpy.get_filename_line()), ShowMenu("_editor_main")]
+        
         textbutton _("Back") action Rollback()
         textbutton _("History") action ShowMenu('history')
         textbutton _("Skip") action Skip() alternate Skip(fast=True, confirm=True)
